@@ -1,0 +1,17 @@
+{
+  "name": "G&G — Gestor y Gastos",
+  "short_name": "G&G",
+  "description": "Presupuesto personal con el m\u00e9todo 50/30/20.",
+  "lang": "es-ES",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F5F2",
+  "theme_color": "#F4F5F2",
+  "icons": [
+    { "src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "iconos/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

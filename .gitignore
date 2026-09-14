@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Firma del APK — NUNCA subir a un repositorio
+*.keystore
+*.jks
+signing-key-info.txt
