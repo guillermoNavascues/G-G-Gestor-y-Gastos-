@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gyg",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8812", "--directory", "docs"],
+      "port": 8812
+    }
+  ]
+}

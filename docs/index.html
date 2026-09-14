@@ -213,17 +213,6 @@ details.plan[open] summary .chev{transform:rotate(180deg)}
 .cierre b{display:block; font-size:17px; font-weight:700; letter-spacing:-.02em; color:var(--c)}
 .cierre span{font-size:10px; color:var(--ink-3)}
 
-/* ---------- aviso ejemplos ---------- */
-.aviso{
-  display:flex; align-items:center; gap:10px; background:var(--o-soft);
-  border:1px solid var(--o); border-radius:11px; padding:9px 12px; margin-bottom:12px;
-  font-size:12px; color:var(--ink-2); line-height:1.4;
-}
-.aviso button{
-  margin-left:auto; flex:none; background:var(--o); color:var(--ground); border:0;
-  border-radius:99px; padding:5px 11px; font-size:11.5px; font-weight:600;
-}
-
 /* ---------- FAB ---------- */
 .fab{
   position:fixed; right:max(16px, calc(50vw - 280px + 16px)); bottom:20px; z-index:20;
@@ -335,7 +324,6 @@ input[type="number"]{font-family:"IBM Plex Mono",monospace; font-variant-numeric
     </button>
   </div>
 
-  <div id="avisoEj"></div>
   <div id="baseBox"></div>
   <div class="sobres" id="sobres"></div>
   <div class="foco" id="foco"></div>
@@ -400,17 +388,12 @@ var CUENTAS_DEF = [
 var ROLES = {ingresos:"Entra la nómina", gasto:"Gasto diario", ahorro:"Ahorro", otro:"Otra"};
 
 var CONFIG_DEF = {
-  ingresoBase: 1800,
+  ingresoBase: 0,
   pct: {e:50, o:30, a:20},
   rollover: "arrastrar",
   cuentas: CUENTAS_DEF,
   categorias: CATS_DEF,
-  fijos: [
-    {id:"f1", nom:"Alquiler",  importe:650,   cat:"alquiler", cuenta:"sab", dia:1},
-    {id:"f2", nom:"Gimnasio",  importe:34.9,  cat:"gym",      cuenta:"sab", dia:3},
-    {id:"f3", nom:"Móvil",     importe:12.99, cat:"tele",     cuenta:"sab", dia:5}
-  ],
-  ejemplos: true
+  fijos: []
 };
 
 /* ============================ utilidades ============================ */
@@ -605,7 +588,6 @@ function render(){
   var k = calcular(S.mes);
 
   document.getElementById("mesTit").textContent = nombreMes(S.mes);
-  renderAviso(c);
   renderBase(k, c);
   renderSobres(k);
   renderFoco(k, c);
@@ -615,17 +597,6 @@ function render(){
   document.getElementById("sync").innerHTML = almacen.estado === "nube"
     ? "<b>Sincronizado en la nube.</b> Tus datos te siguen si cambias de móvil."
     : "<b>Guardado en este dispositivo.</b> Antes de cambiar de móvil, exporta una copia desde Ajustes \u2192 Copia.";
-}
-
-function renderAviso(c){
-  var el = document.getElementById("avisoEj");
-  if (!c.ejemplos){ el.innerHTML = ""; return; }
-  el.innerHTML =
-    '<div class="aviso">' +
-      '<span>Estos son <b>datos de ejemplo</b> para que veas cómo funciona. Bórralos y mete los tuyos.</span>' +
-      '<button id="borrarEj">Empezar de cero</button>' +
-    '</div>';
-  document.getElementById("borrarEj").onclick = borrarEjemplos;
 }
 
 function renderBase(k, c){
@@ -782,10 +753,11 @@ function renderLista(k){
 
   var cont = document.getElementById("lista");
   if (!lista.length){
-    cont.innerHTML = '<div class="vacio">' +
-      (S.filtro ? "Todavía no hay gastos en " + BUCKETS[S.filtro].nom.toLowerCase() + " este mes."
-                : "Aún no has registrado nada este mes.<br>Toca el <b>+</b> para empezar.") +
-      '</div>';
+    var vacio;
+    if (S.filtro) vacio = "Todavía no hay gastos en " + BUCKETS[S.filtro].nom.toLowerCase() + " este mes.";
+    else if (!cfg().ingresoBase) vacio = "Empieza poniendo tu nómina ahí arriba.<br>Después, el <b>+</b> para cada gasto.";
+    else vacio = "Aún no has registrado nada este mes.<br>Toca el <b>+</b> para empezar.";
+    cont.innerHTML = '<div class="vacio">' + vacio + '</div>';
     return;
   }
 
@@ -906,16 +878,6 @@ function registrarFijo(fid){
     cat: f.cat, cuenta: f.cuenta, fecha: S.mes + "-" + String(dia).padStart(2,"0"),
     fijoId: f.id, creado: Date.now()
   });
-}
-
-function borrarEjemplos(){
-  var c = JSON.parse(JSON.stringify(cfg()));
-  c.ejemplos = false;
-  c.ingresoBase = 0;
-  c.fijos = [];
-  guardarConfig(c);
-  guardarMes(S.mes, {movimientos: []});
-  abrirAjustes("general");
 }
 
 /* ============================ hoja: movimiento ============================ */
@@ -1221,7 +1183,6 @@ function pintarAjustes(){
         a: +document.getElementById("aPa").value || 0
       };
       n.rollover = document.getElementById("aRoll").value;
-      if (n.ingresoBase > 0) n.ejemplos = false;
       guardarConfig(n);
       dlgAj.close();
     };
@@ -1400,25 +1361,6 @@ function cablearDatos(){
   };
 }
 
-/* ============================ semilla de ejemplo ============================ */
-
-function movimientosEjemplo(id){
-  var d = function(n){ return id + "-" + String(Math.min(n, diasDelMes(id))).padStart(2,"0"); };
-  return [
-    {id:uid(), tipo:"gasto",    concepto:"Alquiler",            importe:650,   cat:"alquiler", cuenta:"sab", fecha:d(1),  fijoId:"f1", creado:1},
-    {id:uid(), tipo:"traspaso", concepto:"Reparto de la nómina",importe:790,   cuenta:"sab", destino:"tr",  fecha:d(1),  creado:2},
-    {id:uid(), tipo:"gasto",    concepto:"Traspaso al ahorro",  importe:360,   cat:"emerg",    cuenta:"ob",  fecha:d(1),  creado:3},
-    {id:uid(), tipo:"gasto",    concepto:"Gimnasio",            importe:34.9,  cat:"gym",      cuenta:"sab", fecha:d(3),  fijoId:"f2", creado:4},
-    {id:uid(), tipo:"gasto",    concepto:"Abono transporte",    importe:30,    cat:"transp",   cuenta:"tr",  fecha:d(3),  creado:5},
-    {id:uid(), tipo:"gasto",    concepto:"Mercadona",           importe:62.4,  cat:"super",    cuenta:"tr",  fecha:d(5),  creado:6},
-    {id:uid(), tipo:"gasto",    concepto:"Netflix",             importe:13.99, cat:"subs",     cuenta:"tr",  fecha:d(7),  creado:7},
-    {id:uid(), tipo:"gasto",    concepto:"Cena con Ana",        importe:38.5,  cat:"resta",    cuenta:"tr",  fecha:d(9),  creado:8},
-    {id:uid(), tipo:"gasto",    concepto:"Bizum de Ana",        importe:-19.25,cat:"resta",    cuenta:"tr",  fecha:d(10), creado:9},
-    {id:uid(), tipo:"gasto",    concepto:"Mercadona",           importe:48.15, cat:"super",    cuenta:"tr",  fecha:d(12), creado:10},
-    {id:uid(), tipo:"gasto",    concepto:"Zapatillas",          importe:74.95, cat:"ropa",     cuenta:"tr",  fecha:d(13), creado:11}
-  ];
-}
-
 /* ============================ arranque ============================ */
 
 function cargarLocal(){
@@ -1426,7 +1368,6 @@ function cargarLocal(){
   S.config = c || JSON.parse(JSON.stringify(CONFIG_DEF));
   var m = almacen.local("mes:" + S.mes);
   if (m) S.meses[S.mes] = m;
-  else if (S.config.ejemplos) S.meses[S.mes] = {movimientos: movimientosEjemplo(S.mes)};
   var p = almacen.local("mes:" + mesAnterior(S.mes));
   if (p) S.meses[mesAnterior(S.mes)] = p;
 }
@@ -1467,6 +1408,14 @@ document.getElementById("limpiarFiltro").onclick = function(){ S.filtro = null; 
 [dlgMov, dlgAj].forEach(function(d){
   d.addEventListener("click", function(ev){ if (ev.target === d) d.close(); });
 });
+
+// Sin esto, el navegador puede borrar los datos si le falta espacio.
+// Una app instalada suele obtener el permiso automaticamente.
+if (navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted().then(function(ya){
+    if (!ya) return navigator.storage.persist();
+  }).catch(function(){});
+}
 
 cargarLocal();
 render();

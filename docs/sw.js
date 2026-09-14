@@ -1,6 +1,6 @@
 /* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = "gyg-" + VERSION;
 
 const ESQUELETO = [

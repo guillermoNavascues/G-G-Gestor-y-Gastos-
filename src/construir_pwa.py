@@ -197,8 +197,8 @@ function cablearDatos(){
 }
 
 """
-src = sustituir(src, u'/* ============================ semilla de ejemplo ============================ */',
-                LOGICA + u'/* ============================ semilla de ejemplo ============================ */',
+src = sustituir(src, u'/* ============================ arranque ============================ */',
+                LOGICA + u'/* ============================ arranque ============================ */',
                 "logica copia")
 
 
@@ -256,7 +256,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = "gyg-" + VERSION;
 
 const ESQUELETO = [
