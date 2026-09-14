@@ -61,8 +61,8 @@ src = CABECERA + src + u"\n</body>\n</html>\n"
 # ------------------------------------------------- 2. pestana nueva en ajustes
 src = sustituir(
     src,
-    u'[["general","Reparto"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]]',
-    u'[["general","Reparto"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]]',
+    u'[["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]]',
+    u'[["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]]',
     "pestanas")
 
 
@@ -247,7 +247,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v6";
+const VERSION = "v7";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.

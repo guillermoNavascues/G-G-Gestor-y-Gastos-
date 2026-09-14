@@ -112,6 +112,17 @@ button{font:inherit; color:inherit; cursor:pointer}
   border-radius:var(--r); padding:12px 14px;
 }
 .tarj.acc{border-left:3px solid var(--c)}
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.tarj.mini{border-left:3px solid var(--a); padding:11px 12px}
+.tarj.mini b{display:block; font-size:20px; font-weight:700; letter-spacing:-.03em; margin-top:4px; line-height:1.05}
+.tarj.mini b.neg{color:var(--danger)}
+.tarj.mini span.pie{display:block; font-size:10.5px; color:var(--ink-3); margin-top:3px; line-height:1.3}
+.tarj.meta{border-left:3px solid var(--o)}
+.metafila{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin:3px 0 9px}
+.metafila .v{font-size:23px; font-weight:700; letter-spacing:-.03em}
+.metafila .de{font-size:12px; color:var(--ink-3); font-weight:600}
+.tope{font-size:11.5px; font-weight:600; margin:-4px 0 12px}
+.tope.mal{color:var(--danger)}
 .tarj.cap{border-left:3px solid var(--a)}
 .capfila{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-top:3px}
 .capbig{font-size:26px; font-weight:700; letter-spacing:-.03em; line-height:1.05}
@@ -248,8 +259,10 @@ input[type="number"]{font-family:"IBM Plex Mono",monospace; font-variant-numeric
 .nota{font-size:11.5px; color:var(--ink-3); line-height:1.45; margin:-4px 0 14px}
 
 /* ajustes */
-.tabs{display:flex; gap:3px; background:var(--surface-2); padding:3px; border-radius:11px; margin-bottom:16px}
-.tabs button{flex:1; border:0; background:none; padding:8px 2px; border-radius:8px; font-size:12px; font-weight:600; color:var(--ink-3)}
+.tabs{display:flex; gap:3px; background:var(--surface-2); padding:3px; border-radius:11px; margin-bottom:16px;
+  overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:1 0 auto; white-space:nowrap; border:0; background:none; padding:8px 11px; border-radius:8px; font-size:12px; font-weight:600; color:var(--ink-3)}
 .tabs button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
 .listaed{display:grid; gap:7px; margin-bottom:12px}
 .item{
@@ -364,7 +377,7 @@ var ROLES = {ingresos:"Entra la nómina", gasto:"Gasto diario", ahorro:"Ahorro",
 var CONFIG_DEF = {
   ingresoBase: 0,
   pct: {e:50, o:30, a:20},
-  rollover: "arrastrar",
+  meta: null,
   cuentas: CUENTAS_DEF,
   categorias: CATS_DEF,
   fijos: []
@@ -489,22 +502,9 @@ function calcular(id){
     a: base * (c.pct.a||0)/100
   };
 
-  // arrastre del mes anterior
-  var arr = {e:0,o:0,a:0};
-  var prevId = mesAnterior(id);
-  if (c.rollover !== "reiniciar" && S.meses[prevId]) {
-    var p = calcularCrudo(prevId);
-    var sobraE = p.asignado.e - p.gastado.e;
-    var sobraO = p.asignado.o - p.gastado.o;
-    if (c.rollover === "arrastrar") {
-      if (sobraE > 0) arr.e = sobraE;
-      if (sobraO > 0) arr.o = sobraO;
-    } else if (c.rollover === "ahorro") {
-      var s = (sobraE>0?sobraE:0) + (sobraO>0?sobraO:0);
-      if (s > 0) arr.a = s;
-    }
-  }
-  asignado.e += arr.e; asignado.o += arr.o; asignado.a += arr.a;
+  // Los sobres son SIEMPRE el porcentaje del ingreso. Lo que sobra a fin
+  // de mes no engorda ninguna asignación: se convierte en ahorro, que es
+  // justo lo que significa ahorrar.
 
   var gastado = {e:0,o:0,a:0};
   for (i=0;i<lista.length;i++){
@@ -525,26 +525,22 @@ function calcular(id){
     pendientes.push(f);
   }
 
+  // La meta de ahorro especial reserva parte del ocio y, si no llega, un
+  // pellizco del sobre de ahorro. De esenciales no se toca nada nunca.
+  var rep = repartoMeta(asignado);
+  if (rep){
+    comprometido.o += rep.ocio;
+    comprometido.a += rep.ahorro;
+    pendientes.push({id:"__meta", nom:c.meta.nombre || "Ahorro especial",
+                     importe: rep.total, esMeta:true});
+  }
+
   return {
-    base: base, extra: extra, arrastre: arr,
+    base: base, extra: extra,
     asignado: asignado, gastado: gastado,
     comprometido: comprometido, pendientes: pendientes,
-    fijosPagados: pagados
+    fijosPagados: pagados, meta: rep
   };
-}
-
-// versión sin arrastre, para evitar recursión infinita entre meses
-function calcularCrudo(id){
-  var c = cfg(), lista = movs(id), extra = 0, i;
-  for (i=0;i<lista.length;i++) if (lista[i].tipo==="ingreso") extra += (+lista[i].importe||0);
-  var base = (+c.ingresoBase||0) + extra;
-  var asignado = {e:base*(c.pct.e||0)/100, o:base*(c.pct.o||0)/100, a:base*(c.pct.a||0)/100};
-  var gastado = {e:0,o:0,a:0};
-  for (i=0;i<lista.length;i++){
-    if (lista[i].tipo!=="gasto") continue;
-    gastado[cat(lista[i].cat).b] += (+lista[i].importe||0);
-  }
-  return {asignado:asignado, gastado:gastado};
 }
 
 var PREFIJO_MES = "tresobres:mes:";
@@ -580,32 +576,94 @@ function balanceMes(lista){
   return {extra: extra, gasto: gasto, ahorro: ahorro};
 }
 
-// Lo que un mes suma al capital: entradas menos gastos reales.
-function capitalDelMes(id){
-  var lista = movs(id);
-  if (!lista.length) return 0;
+// Lo que un mes deja ahorrado en total: lo que entró menos lo gastado de
+// verdad. Incluye el 20% obligatorio y lo que sobró de los otros dos sobres.
+function ahorradoMes(lista, base){
   var b = balanceMes(lista);
-  return (+cfg().ingresoBase || 0) + b.extra - b.gasto;
+  return (base + b.extra) - b.gasto;
 }
 
-// Capital acumulado de todos los meses usados.
-function capital(){
+// Lo que sobró de esenciales y ocio en un mes. El 20% no cuenta aquí: ese
+// ya era ahorro por definición. Esto es lo ahorrado de más.
+function sobranteMes(id){
+  var lista = movs(id);
+  if (!lista.length) return 0;
+  var c = cfg(), b = balanceMes(lista);
+  var ingreso = (+c.ingresoBase || 0) + b.extra;
+  return ingreso * ((c.pct.e||0) + (c.pct.o||0)) / 100 - b.gasto;
+}
+
+// Todos los ahorros acumulados, mes a mes.
+function ahorroTotal(){
   var meses = mesesConocidos();
   var base = +cfg().ingresoBase || 0;
-  var entrado = 0, gastado = 0, ahorrado = 0, usados = 0;
+  var total = 0, obligatorio = 0, usados = 0;
 
   Object.keys(meses).forEach(function(id){
     var lista = (meses[id] && meses[id].movimientos) || [];
-    if (!lista.length) return;   // mes sin estrenar: no inventamos una nomina
+    if (!lista.length) return;   // mes sin estrenar: no inventamos una nómina
     var b = balanceMes(lista);
-    entrado += base + b.extra;
-    gastado += b.gasto;
-    ahorrado += b.ahorro;
+    total += ahorradoMes(lista, base);
+    obligatorio += (base + b.extra) * (cfg().pct.a || 0) / 100;
     usados++;
   });
 
-  var total = entrado - gastado;
-  return {total: total, ahorro: ahorrado, suelto: total - ahorrado, meses: usados};
+  return {total: total, obligatorio: obligatorio,
+          demas: total - obligatorio, meses: usados};
+}
+
+// Tope de lo que puede absorber la meta: todo el ocio y un 10% del ahorro.
+// De esenciales, nada. Nunca.
+function topeMeta(asignado){
+  var a = asignado || null;
+  if (!a){
+    var c = cfg(), base = +c.ingresoBase || 0;
+    a = {o: base*(c.pct.o||0)/100, a: base*(c.pct.a||0)/100};
+  }
+  var ocio = a.o, ahorro = a.a * 0.10;
+  return {ocio: ocio, ahorro: ahorro, total: ocio + ahorro};
+}
+
+// De dónde sale la aportación de este mes: primero el ocio, y sólo si no
+// llega, hasta un 10% del sobre de ahorro.
+function repartoMeta(asignado){
+  var m = cfg().meta;
+  if (!m || !(+m.aportacion > 0) || !(+m.objetivo > 0)) return null;
+  var tope = topeMeta(asignado);
+  var cuota = Math.min(+m.aportacion, tope.total);
+  var ocio = Math.min(cuota, tope.ocio);
+  return {ocio: ocio, ahorro: cuota - ocio, total: cuota};
+}
+
+// Estado de la meta: cuánto lleva, cuánto falta y para cuándo.
+function metaEstado(){
+  var m = cfg().meta;
+  if (!m || !(+m.objetivo > 0)) return null;
+
+  var cuota = repartoMeta(null);
+  cuota = cuota ? cuota.total : 0;
+
+  var ini = m.desde ? mesDesde(m.desde) : new Date();
+  var hoy = new Date();
+  var n = (hoy.getFullYear()-ini.getFullYear())*12 + (hoy.getMonth()-ini.getMonth()) + 1;
+  if (n < 0) n = 0;
+
+  // No se puede haber apartado más de lo que realmente se ha ahorrado.
+  var disponible = ahorroTotal().total;
+  var acumulado = Math.max(0, Math.min(n * cuota, +m.objetivo, disponible));
+  var restante = Math.max(0, (+m.objetivo) - acumulado);
+  var faltan = cuota > 0 ? Math.ceil(restante / cuota) : null;
+
+  var fecha = null;
+  if (faltan) {
+    var f = new Date(hoy.getFullYear(), hoy.getMonth() + faltan, 1);
+    fecha = f.toLocaleDateString("es-ES", {month:"long", year:"numeric"});
+  }
+
+  return {nombre: m.nombre || "Ahorro especial", objetivo: +m.objetivo,
+          cuota: cuota, acumulado: acumulado, restante: restante,
+          faltan: faltan, fecha: fecha,
+          pct: Math.min(100, acumulado / (+m.objetivo) * 100)};
 }
 
 /* ============================ render ============================ */
@@ -680,23 +738,47 @@ function renderFoco(k, c){
   var cont = document.getElementById("foco");
   var html = "";
 
-  // 1 — capital acumulado
-  var cap = capital();
-  if (cap.meses > 0){
-    var delMes = capitalDelMes(S.mes);
+  // 1 — lo ahorrado este mes y los ahorros totales
+  var aho = ahorroTotal();
+  if (aho.meses > 0){
+    var sobra = sobranteMes(S.mes);
+    var enCurso = S.mes === mesId(new Date());
     html +=
-      '<div class="tarj cap">' +
-        '<div class="lbl">Capital acumulado</div>' +
-        '<div class="capfila">' +
-          '<span class="capbig num' + (cap.total < 0 ? ' neg' : '') + '">' + money(cap.total) + '</span>' +
-          (delMes ? '<span class="capmes num' + (delMes < 0 ? ' neg' : '') + '">' +
-                      (delMes > 0 ? '+' : '') + money(delMes) + ' este mes</span>' : '') +
+      '<div class="duo">' +
+        '<div class="tarj mini">' +
+          '<span class="lbl">Capital ahorrado</span>' +
+          '<b class="num' + (sobra < 0 ? ' neg' : '') + '">' + money(sobra) + '</b>' +
+          '<span class="pie">De más este mes, aparte del ' + (cfg().pct.a||0) + '%' +
+            (enCurso ? ' · aún en curso' : '') + '</span>' +
         '</div>' +
-        '<div class="capdet">' +
-          '<div><span class="lbl">Apartado en ahorro</span><b class="num">' + money(cap.ahorro) + '</b></div>' +
-          '<div><span class="lbl">Suelto en cuentas</span><b class="num">' + money(cap.suelto) + '</b></div>' +
+        '<div class="tarj mini">' +
+          '<span class="lbl">Ahorros</span>' +
+          '<b class="num' + (aho.total < 0 ? ' neg' : '') + '">' + money(aho.total) + '</b>' +
+          '<span class="pie">Total en ' + aho.meses + (aho.meses === 1 ? ' mes' : ' meses') + '</span>' +
         '</div>' +
-        '<p class="nota" style="margin:9px 0 0">Lo suelto te ha sobrado, pero no lo has movido al ahorro. Sigue siendo tuyo.</p>' +
+      '</div>';
+  }
+
+  // 1b — meta de ahorro especial
+  var mt = metaEstado();
+  if (mt){
+    html +=
+      '<div class="tarj meta">' +
+        '<div class="lbl">Ahorro especial · ' + esc(mt.nombre) + '</div>' +
+        '<div class="metafila">' +
+          '<span class="v num">' + money(mt.acumulado) + '</span>' +
+          '<span class="de num">de ' + money(mt.objetivo) + '</span>' +
+        '</div>' +
+        '<span class="bar" style="--c:var(--o)">' +
+          '<i class="fill" style="width:' + mt.pct.toFixed(1) + '%"></i>' +
+        '</span>' +
+        '<p class="nota" style="margin:9px 0 0">' +
+          (mt.restante <= 0
+            ? '¡Ya lo tienes! Te sobran ' + money(mt.acumulado - mt.objetivo) + '.'
+            : 'Faltan ' + money(mt.restante) + ' · ' + money(mt.cuota) + ' al mes · ' +
+              (mt.faltan ? mt.faltan + (mt.faltan === 1 ? ' mes, hacia ' : ' meses, hacia ') + mt.fecha
+                         : 'sin aportación no avanza')) +
+        '</p>' +
       '</div>';
   }
 
@@ -705,6 +787,12 @@ function renderFoco(k, c){
     var totalPend = 0;
     k.pendientes.forEach(function(f){ totalPend += (+f.importe||0); });
     var filas = k.pendientes.map(function(f){
+      if (f.esMeta) {
+        return '<div class="fijo">' +
+          '<div class="n">' + esc(f.nom) + '<span>Ahorro especial · sale del ocio</span></div>' +
+          '<div class="im num">' + money(f.importe) + '</div>' +
+        '</div>';
+      }
       return '<div class="fijo">' +
         '<div class="n">' + esc(f.nom) + '<span>' + esc(cat(f.cat).nom) + ' · ' + esc(cuenta(f.cuenta).nom) + '</span></div>' +
         '<div class="im num">' + money(f.importe) + '</div>' +
@@ -1072,14 +1160,7 @@ function pintarAjustes(){
       '</div>' +
       '<div class="sum ' + (suma === 100 ? "good" : "bad") + '" id="aSuma">Suma: ' + suma + '%' + (suma === 100 ? " ✓" : " — debería sumar 100") + '</div>' +
 
-      '<div class="campo" style="margin-top:16px">' +
-        '<label for="aRoll">Qué pasa con lo que sobra a fin de mes</label>' +
-        '<select id="aRoll">' +
-          '<option value="arrastrar"' + (c.rollover==="arrastrar"?" selected":"") + '>Se arrastra al mismo sobre</option>' +
-          '<option value="ahorro"' + (c.rollover==="ahorro"?" selected":"") + '>Se va todo al ahorro</option>' +
-          '<option value="reiniciar"' + (c.rollover==="reiniciar"?" selected":"") + '>Se reinicia, empiezo limpio</option>' +
-        '</select>' +
-      '</div>' +
+      '<p class="nota" style="margin-top:16px">Los sobres son siempre estos porcentajes del ingreso. Lo que sobre a fin de mes pasa a tus ahorros.</p>' +
 
       '<div class="acciones"><button class="btn" id="aGuardar">Guardar</button></div>';
   }
@@ -1161,11 +1242,37 @@ function pintarAjustes(){
       '<button class="add" id="aAddCat">+ Añadir categoría</button>';
   }
 
+  if (pestana === "meta"){
+    var m = c.meta || {};
+    var tope = topeMeta(null);
+    var ap = +m.aportacion || 0;
+    var pasado = ap > tope.total;
+    cuerpo =
+      '<p class="nota" style="margin-top:0">Aparta dinero cada mes para una compra concreta: un coche, un viaje, lo que sea. La app te dice cuánto falta y para cuándo.</p>' +
+      '<div class="campo"><label for="mtNom">Qué quieres comprar</label>' +
+        '<input type="text" id="mtNom" placeholder="Un coche" value="' + esc(m.nombre || "") + '"></div>' +
+      '<div class="fila2">' +
+        '<div class="campo"><label for="mtObj">Cuánto cuesta</label>' +
+          '<input type="number" id="mtObj" inputmode="decimal" step="0.01" min="0" placeholder="0,00" value="' + (m.objetivo || "") + '"></div>' +
+        '<div class="campo"><label for="mtApo">Al mes</label>' +
+          '<input type="number" id="mtApo" inputmode="decimal" step="0.01" min="0" placeholder="0,00" value="' + (m.aportacion || "") + '"></div>' +
+      '</div>' +
+      '<div class="tope ' + (pasado ? 'mal' : '') + '" id="mtTope">Máximo ' + money(tope.total) + ' al mes' +
+        (pasado ? ' — te has pasado, se aplicará el máximo' : '') + '</div>' +
+      '<p class="nota">Sale del ocio (' + money(tope.ocio) + ') y, si no llega, de hasta un 10% del sobre de ahorro (' + money(tope.ahorro) + '). De los esenciales no se toca nada.</p>' +
+      '<div class="campo"><label for="mtDesde">Empecé a apartar en</label>' +
+        '<input type="month" id="mtDesde" value="' + esc(m.desde || mesId(new Date())) + '"></div>' +
+      '<div class="acciones">' +
+        (c.meta ? '<button class="btn del" id="mtBorrar">Quitar</button>' : '') +
+        '<button class="btn" id="mtGuardar">Guardar</button>' +
+      '</div>';
+  }
+
   document.getElementById("ajBody").innerHTML =
     '<h2>Ajustes<button class="ico" id="aCerrar" aria-label="Cerrar">' +
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></h2>' +
     '<div class="tabs" role="group">' +
-      [["general","Reparto"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]].map(function(p){
+      [["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]].map(function(p){
         return '<button type="button" data-tab="' + p[0] + '" aria-pressed="' + (pestana===p[0]) + '">' + p[1] + '</button>';
       }).join("") +
     '</div>' + cuerpo;
@@ -1196,7 +1303,37 @@ function pintarAjustes(){
         o: +document.getElementById("aPo").value || 0,
         a: +document.getElementById("aPa").value || 0
       };
-      n.rollover = document.getElementById("aRoll").value;
+      guardarConfig(n);
+      dlgAj.close();
+    };
+  }
+
+  // meta de ahorro especial
+  if (pestana === "meta"){
+    var mtApo = document.getElementById("mtApo");
+    if (mtApo) mtApo.oninput = function(){
+      var t = topeMeta(null), v = parseFloat(String(mtApo.value).replace(",", ".")) || 0;
+      var d = document.getElementById("mtTope");
+      d.className = "tope " + (v > t.total ? "mal" : "");
+      d.textContent = "Máximo " + money(t.total) + " al mes" +
+        (v > t.total ? " — te has pasado, se aplicará el máximo" : "");
+    };
+    document.getElementById("mtGuardar").onclick = function(){
+      var nom = document.getElementById("mtNom").value.trim();
+      var obj = parseFloat(String(document.getElementById("mtObj").value).replace(",", ".")) || 0;
+      var apo = parseFloat(String(document.getElementById("mtApo").value).replace(",", ".")) || 0;
+      if (!obj){ document.getElementById("mtObj").focus(); return; }
+      var n = JSON.parse(JSON.stringify(cfg()));
+      n.meta = {nombre: nom || "Ahorro especial", objetivo: obj,
+                aportacion: Math.min(apo, topeMeta(null).total),
+                desde: document.getElementById("mtDesde").value || mesId(new Date())};
+      guardarConfig(n);
+      dlgAj.close();
+    };
+    var mtDel = document.getElementById("mtBorrar");
+    if (mtDel) mtDel.onclick = function(){
+      var n = JSON.parse(JSON.stringify(cfg()));
+      n.meta = null;
       guardarConfig(n);
       dlgAj.close();
     };

@@ -13,15 +13,18 @@ depende de ninguna tienda de aplicaciones.
 - Los tres sobres arriba, con lo que queda en cada uno, y la lista de gastos abajo.
 - **Comprometido vs. libre:** los gastos fijos que aún no han pasado se
   descuentan visualmente, para no confundir el saldo con dinero disponible.
-- **Capital acumulado:** todo lo que no has gastado desde que usas la app,
-  desglosado entre lo apartado en el sobre de ahorro y lo que sobró sin
-  llegar a moverlo. Mover dinero al ahorro no cuenta como gasto: cambia de
-  sitio y sigue siendo tuyo.
+- **Capital ahorrado y Ahorros:** lo que sobró de esenciales y ocio este mes,
+  y el total acumulado de todos los meses. Mover dinero al ahorro no cuenta
+  como gasto: cambia de sitio y sigue siendo tuyo.
+- **Ahorro especial:** una meta de compra con aportación mensual. La app
+  calcula cuánto falta y para cuándo. Sólo puede beber del ocio y de un 10 %
+  del sobre de ahorro; de los esenciales, nada.
 - **Plan de traspasos al cobrar:** cuánto mover a cada cuenta el día de la
   nómina, según el papel que tenga asignado cada banco.
 - Devoluciones y Bizums recibidos restan del gasto en lugar de contar como ingreso.
 - Los traspasos entre cuentas propias no tocan ningún sobre.
-- Arrastre configurable de lo que sobra a fin de mes.
+- Los sobres son siempre el porcentaje exacto del ingreso: lo que sobra a fin
+  de mes no los infla, pasa a los ahorros.
 - Copia de seguridad exportable e importable en `.json`.
 
 La categoría decide en qué sobre cae un gasto — **no** la cuenta desde la que
@@ -35,10 +38,10 @@ src/
   construir_pwa.py    Genera docs/ a partir del fuente
   gen_iconos.py       Genera los iconos (las bandas son 50/30/20)
 docs/
-  index.html          Build de la PWA — lo que sirve GitHub Pages
+  index.html          Build de la PWA — lo que sirve Cloudflare
   manifest.webmanifest
   sw.js               Service worker
-  .nojekyll           Para que Pages sirva .well-known/
+  .nojekyll           Para que GitHub Pages sirviese .well-known/ (sin uso hoy)
   iconos/
 ```
 
@@ -59,12 +62,18 @@ python construir_pwa.py
 > Sin eso, los móviles que ya la tengan instalada seguirán sirviendo la
 > versión cacheada.
 
-## Publicar en GitHub Pages
+## Publicar
 
-*Settings → Pages → Source: rama `main`, carpeta `/docs`.*
+Desplegado en **Cloudflare Workers** como Worker de sólo activos: `wrangler.jsonc`
+declara `docs/` como directorio a servir, y cada push a `main` despliega solo.
 
-Queda en `https://<usuario>.github.io/<repo>/`. Hace falta HTTPS: sin
-certificado no hay service worker, y sin service worker no hay instalación.
+Se eligió Workers en lugar de Pages porque el backend de PSD2 de la Fase 2 vivirá
+aquí mismo: bastará añadir `main` al `wrangler.jsonc` y el mismo Worker servirá la
+app y la API bajo el mismo dominio. Cambiar de dominio implicaría perder los datos
+guardados en el móvil, así que conviene no mudarse.
+
+Hace falta HTTPS: sin certificado no hay service worker, y sin service worker no
+hay instalación ni funcionamiento sin conexión.
 
 ## Instalar en el móvil
 
@@ -75,17 +84,17 @@ certificado no hay service worker, y sin service worker no hay instalación.
 ## Generar el APK
 
 El APK se construye con [PWABuilder](https://www.pwabuilder.com) a partir de
-la URL de Pages. Genera una *Trusted Web Activity*: una app Android real que
+la URL publicada. Genera una *Trusted Web Activity*: una app Android real que
 envuelve la PWA.
 
-1. Pega la URL de Pages en PWABuilder → *Package for stores* → *Android*.
+1. Pega la URL publicada en PWABuilder → *Package for stores* → *Android*.
 2. Guarda el **keystore y sus contraseñas** en sitio seguro. Si se pierden,
    no se podrá volver a firmar una actualización de la app.
 3. Copia el `assetlinks.json` que genera a `docs/.well-known/assetlinks.json`
    y vuelve a publicar. Sin ese fichero la app muestra barra de direcciones.
 4. Instala el APK en el móvil (hay que permitir orígenes desconocidos).
 
-El APK es un envoltorio: carga desde la URL de Pages y funciona sin conexión
+El APK es un envoltorio: carga desde la URL publicada y funciona sin conexión
 gracias al service worker, pero el primer arranque necesita red.
 
 **El APK es solo para Android.** En iPhone no existe el sideload: allí se
@@ -107,10 +116,10 @@ todas formas.
 
 | Fase | Contenido | Estado |
 |------|-----------|--------|
-| 0 | App manual, tres sobres, gastos fijos, plan de traspasos | ✅ |
+| 0 | App manual, tres sobres, gastos fijos, plan de traspasos, ahorro especial | ✅ |
 | 1 | Importación de extractos CSV + motor de reglas de categorización | pendiente |
 | 2 | Conexión bancaria PSD2 vía GoCardless + backend + sincronización | pendiente |
-| 3 | Notificaciones, fondos de reserva, detección de recurrentes | pendiente |
+| 3 | Notificaciones, detección de recurrentes, varias metas a la vez | pendiente |
 | 4 | Informes, patrimonio neto, exportación | pendiente |
 
 ### Sobre la conexión bancaria (Fase 2)
