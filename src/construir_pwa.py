@@ -256,12 +256,16 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v4";
+const VERSION = "v5";
 const CACHE = "gyg-" + VERSION;
 
+// "./" es la entrada canonica de la app y la que declara el manifiesto.
+// NO se lista "./index.html": Cloudflare (y otros hosts) responden a esa
+// ruta con un 307 hacia "/", y una respuesta redirigida no se puede
+// guardar en la cache. Listarla haria fallar la instalacion entera y nos
+// quedariamos sin modo sin conexion, encima en silencio.
 const ESQUELETO = [
   "./",
-  "./index.html",
   "./manifest.webmanifest",
   "./iconos/icono-192.png",
   "./iconos/icono-512.png",
@@ -273,12 +277,21 @@ const ESQUELETO = [
 const FUENTES = /^https:\\/\\/fonts\\.(googleapis|gstatic)\\.com\\//;
 
 self.addEventListener("install", (ev) => {
-  // {cache: "reload"} es imprescindible: sin el, addAll puede servirse de la
-  // cache HTTP del navegador y guardar una copia vieja del index.html. La
-  // version nueva quedaria cacheada como si fuese la actual y no llegaria.
+  // Se guarda fichero a fichero en lugar de con addAll: addAll es todo o
+  // nada, asi que un solo activo caido dejaria al worker sin instalar y a
+  // la app sin funcionar sin conexion. Aqui lo que falle se reintentara
+  // en su proxima peticion.
+  //
+  // {cache: "reload"} es imprescindible: sin el, la copia podria salir de
+  // la cache HTTP del navegador y guardariamos una version vieja dandola
+  // por actual, con lo que la actualizacion no llegaria nunca.
   ev.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(ESQUELETO.map((u) => new Request(u, { cache: "reload" }))))
+      .then((c) => Promise.all(ESQUELETO.map((u) =>
+        fetch(new Request(u, { cache: "reload" }))
+          .then((res) => (res.ok ? c.put(u, res) : null))
+          .catch(() => null)
+      )))
       .then(() => self.skipWaiting())
   );
 });
@@ -307,14 +320,16 @@ self.addEventListener("fetch", (ev) => {
   if (req.mode === "navigate") {
     const actualizar = fetch(req)
       .then((res) => {
+        // Una respuesta redirigida no se puede guardar; se sirve igual.
+        if (!res.ok || res.redirected) return res;
         const copia = res.clone();
-        return caches.open(CACHE).then((c) => c.put("./index.html", copia)).then(() => res);
+        return caches.open(CACHE).then((c) => c.put("./", copia)).then(() => res);
       })
       .catch(() => null);
 
     ev.waitUntil(actualizar);   // sincrono: mantiene vivo el worker hasta guardar
     ev.respondWith(
-      caches.match("./index.html")
+      caches.match("./")
         .then((hit) => hit || actualizar.then((res) => res || fetch(req)))
     );
     return;
