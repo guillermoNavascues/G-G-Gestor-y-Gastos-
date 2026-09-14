@@ -13,8 +13,10 @@ depende de ninguna tienda de aplicaciones.
 - Los tres sobres arriba, con lo que queda en cada uno, y la lista de gastos abajo.
 - **Comprometido vs. libre:** los gastos fijos que aún no han pasado se
   descuentan visualmente, para no confundir el saldo con dinero disponible.
-- **Disponible al día** en ocio: lo que queda dividido entre los días de mes
-  que faltan.
+- **Capital acumulado:** todo lo que no has gastado desde que usas la app,
+  desglosado entre lo apartado en el sobre de ahorro y lo que sobró sin
+  llegar a moverlo. Mover dinero al ahorro no cuenta como gasto: cambia de
+  sitio y sigue siendo tuyo.
 - **Plan de traspasos al cobrar:** cuánto mover a cada cuenta el día de la
   nómina, según el papel que tenga asignado cada banco.
 - Devoluciones y Bizums recibidos restan del gasto en lugar de contar como ingreso.
