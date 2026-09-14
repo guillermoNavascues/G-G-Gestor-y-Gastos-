@@ -1,6 +1,6 @@
 /* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v5";
+const VERSION = "v6";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.

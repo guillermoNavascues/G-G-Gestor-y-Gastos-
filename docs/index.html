@@ -133,10 +133,15 @@ button{font:inherit; color:inherit; cursor:pointer}
   border-radius:var(--r); padding:12px 14px;
 }
 .tarj.acc{border-left:3px solid var(--c)}
-.hoy{display:flex; align-items:center; gap:12px}
-.hoy .big{font-size:24px; font-weight:700; letter-spacing:-.03em; color:var(--o)}
-.hoy .t{flex:1; min-width:0}
-.hoy .d{font-size:11.5px; color:var(--ink-3); line-height:1.35; margin-top:2px}
+.tarj.cap{border-left:3px solid var(--a)}
+.capfila{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-top:3px}
+.capbig{font-size:26px; font-weight:700; letter-spacing:-.03em; line-height:1.05}
+.capbig.neg{color:var(--danger)}
+.capmes{font-size:12px; font-weight:600; color:var(--a)}
+.capmes.neg{color:var(--danger)}
+.capdet{display:flex; gap:12px; margin-top:11px; padding-top:10px; border-top:1px solid var(--line-soft)}
+.capdet > div{flex:1; min-width:0}
+.capdet b{display:block; font-size:14.5px; font-weight:600; letter-spacing:-.01em; margin-top:3px}
 
 details.plan summary{
   list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px;
@@ -573,12 +578,65 @@ function calcularCrudo(id){
   return {asignado:asignado, gastado:gastado};
 }
 
-function diasRestantes(id){
-  var hoy = new Date();
-  var actual = mesId(hoy);
-  if (id < actual) return 0;
-  if (id > actual) return diasDelMes(id);
-  return diasDelMes(id) - hoy.getDate() + 1;
+var PREFIJO_MES = "tresobres:mes:";
+
+// Todos los meses que conocemos, no solo los dos que hay cargados.
+function mesesConocidos(){
+  var out = {};
+  try{
+    for (var i = 0; i < localStorage.length; i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf(PREFIJO_MES) === 0){
+        out[k.slice(PREFIJO_MES.length)] = JSON.parse(localStorage.getItem(k));
+      }
+    }
+  }catch(e){}
+  Object.keys(S.meses).forEach(function(id){ if (!out[id]) out[id] = S.meses[id]; });
+  return out;
+}
+
+// Reparte un mes en: lo que entro, lo gastado de verdad y lo apartado.
+//
+// Mover dinero al sobre de ahorro NO es gastarlo: cambia de sitio y sigue
+// siendo tuyo. Por eso solo restan esenciales y ocio.
+function balanceMes(lista){
+  var extra = 0, gasto = 0, ahorro = 0;
+  (lista || []).forEach(function(m){
+    var v = +m.importe || 0;
+    if (m.tipo === "ingreso") extra += v;
+    else if (m.tipo === "gasto"){
+      if (cat(m.cat).b === "a") ahorro += v; else gasto += v;
+    }
+  });
+  return {extra: extra, gasto: gasto, ahorro: ahorro};
+}
+
+// Lo que un mes suma al capital: entradas menos gastos reales.
+function capitalDelMes(id){
+  var lista = movs(id);
+  if (!lista.length) return 0;
+  var b = balanceMes(lista);
+  return (+cfg().ingresoBase || 0) + b.extra - b.gasto;
+}
+
+// Capital acumulado de todos los meses usados.
+function capital(){
+  var meses = mesesConocidos();
+  var base = +cfg().ingresoBase || 0;
+  var entrado = 0, gastado = 0, ahorrado = 0, usados = 0;
+
+  Object.keys(meses).forEach(function(id){
+    var lista = (meses[id] && meses[id].movimientos) || [];
+    if (!lista.length) return;   // mes sin estrenar: no inventamos una nomina
+    var b = balanceMes(lista);
+    entrado += base + b.extra;
+    gastado += b.gasto;
+    ahorrado += b.ahorro;
+    usados++;
+  });
+
+  var total = entrado - gastado;
+  return {total: total, ahorro: ahorrado, suelto: total - ahorrado, meses: usados};
 }
 
 /* ============================ render ============================ */
@@ -653,21 +711,23 @@ function renderFoco(k, c){
   var cont = document.getElementById("foco");
   var html = "";
 
-  // 1 — disponible al día en ocio
-  var dias = diasRestantes(S.mes);
-  var restO = k.asignado.o - k.gastado.o;
-  if (dias > 0 && k.asignado.o > 0){
-    var alDia = restO / dias;
+  // 1 — capital acumulado
+  var cap = capital();
+  if (cap.meses > 0){
+    var delMes = capitalDelMes(S.mes);
     html +=
-      '<div class="tarj acc" style="--c:var(--o)">' +
-        '<div class="hoy">' +
-          '<div class="t">' +
-            '<div class="lbl">Puedes gastar al día en ocio</div>' +
-            '<div class="d">' + money(restO > 0 ? restO : 0) + ' repartidos en ' + dias +
-              (dias === 1 ? ' día que queda' : ' días que quedan') + ' de mes</div>' +
-          '</div>' +
-          '<div class="big num">' + (restO > 0 ? money(alDia) : money(0)) + '</div>' +
+      '<div class="tarj cap">' +
+        '<div class="lbl">Capital acumulado</div>' +
+        '<div class="capfila">' +
+          '<span class="capbig num' + (cap.total < 0 ? ' neg' : '') + '">' + money(cap.total) + '</span>' +
+          (delMes ? '<span class="capmes num' + (delMes < 0 ? ' neg' : '') + '">' +
+                      (delMes > 0 ? '+' : '') + money(delMes) + ' este mes</span>' : '') +
         '</div>' +
+        '<div class="capdet">' +
+          '<div><span class="lbl">Apartado en ahorro</span><b class="num">' + money(cap.ahorro) + '</b></div>' +
+          '<div><span class="lbl">Suelto en cuentas</span><b class="num">' + money(cap.suelto) + '</b></div>' +
+        '</div>' +
+        '<p class="nota" style="margin:9px 0 0">Lo suelto te ha sobrado, pero no lo has movido al ahorro. Sigue siendo tuyo.</p>' +
       '</div>';
   }
 
@@ -1264,17 +1324,8 @@ function pintarAjustes(){
 
 /* ============================ copia de seguridad ============================ */
 
-var PREFIJO = "tresobres:mes:";
-
 function inventario(){
-  var meses = {}, movs = 0;
-  try{
-    for (var i = 0; i < localStorage.length; i++){
-      var k = localStorage.key(i);
-      if (k && k.indexOf(PREFIJO) === 0) meses[k.slice(PREFIJO.length)] = JSON.parse(localStorage.getItem(k));
-    }
-  }catch(e){}
-  Object.keys(S.meses).forEach(function(id){ if (!meses[id]) meses[id] = S.meses[id]; });
+  var meses = mesesConocidos(), movs = 0;
   Object.keys(meses).forEach(function(id){
     movs += ((meses[id] && meses[id].movimientos) || []).length;
   });

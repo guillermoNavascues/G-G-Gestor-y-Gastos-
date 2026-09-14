@@ -99,17 +99,8 @@ src = sustituir(src, u'  // categorías\n  if (pestana === "cats"){',
 # ------------------------------------------------- 4. logica de copia e install
 LOGICA = u"""/* ============================ copia de seguridad ============================ */
 
-var PREFIJO = "tresobres:mes:";
-
 function inventario(){
-  var meses = {}, movs = 0;
-  try{
-    for (var i = 0; i < localStorage.length; i++){
-      var k = localStorage.key(i);
-      if (k && k.indexOf(PREFIJO) === 0) meses[k.slice(PREFIJO.length)] = JSON.parse(localStorage.getItem(k));
-    }
-  }catch(e){}
-  Object.keys(S.meses).forEach(function(id){ if (!meses[id]) meses[id] = S.meses[id]; });
+  var meses = mesesConocidos(), movs = 0;
   Object.keys(meses).forEach(function(id){
     movs += ((meses[id] && meses[id].movimientos) || []).length;
   });
@@ -256,7 +247,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v5";
+const VERSION = "v6";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.
