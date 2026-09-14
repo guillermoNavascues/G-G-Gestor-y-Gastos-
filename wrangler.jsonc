@@ -1,0 +1,14 @@
+{
+  // Worker de solo activos: no hay codigo, unicamente ficheros estaticos.
+  // El nombre debe coincidir con el del proyecto en el panel de Cloudflare.
+  "name": "g-g-gestor-y-gastos",
+  "compatibility_date": "2025-09-01",
+
+  // docs/ es el build de la PWA que genera src/construir_pwa.py
+  "assets": {
+    "directory": "./docs"
+  }
+
+  // Fase 2: aqui se anadira "main" con el backend de PSD2, y este mismo
+  // Worker servira la app y la API bajo el mismo dominio.
+}

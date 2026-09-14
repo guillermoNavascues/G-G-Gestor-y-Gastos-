@@ -11,3 +11,7 @@ desktop.ini
 *.keystore
 *.jks
 signing-key-info.txt
+
+# Cloudflare / Node
+node_modules/
+.wrangler/
