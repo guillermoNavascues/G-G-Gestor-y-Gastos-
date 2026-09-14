@@ -256,7 +256,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v2";
+const VERSION = "v4";
 const CACHE = "gyg-" + VERSION;
 
 const ESQUELETO = [
@@ -273,9 +273,12 @@ const ESQUELETO = [
 const FUENTES = /^https:\\/\\/fonts\\.(googleapis|gstatic)\\.com\\//;
 
 self.addEventListener("install", (ev) => {
+  // {cache: "reload"} es imprescindible: sin el, addAll puede servirse de la
+  // cache HTTP del navegador y guardar una copia vieja del index.html. La
+  // version nueva quedaria cacheada como si fuese la actual y no llegaria.
   ev.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(ESQUELETO))
+      .then((c) => c.addAll(ESQUELETO.map((u) => new Request(u, { cache: "reload" }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -294,16 +297,25 @@ self.addEventListener("fetch", (ev) => {
   const req = ev.request;
   if (req.method !== "GET") return;
 
-  // Navegacion: red primero, para que una version nueva llegue sola.
+  // Navegacion: cache primero y actualizacion en segundo plano.
+  //
+  // Abrir la app NUNCA debe esperar a la red. Con "red primero", una
+  // conexion mala (una barra, portal cautivo del metro) deja la pantalla
+  // en blanco hasta que la peticion agota su tiempo. Servimos lo que ya
+  // esta en el movil al instante y buscamos version nueva por detras:
+  // aparece en la siguiente apertura.
   if (req.mode === "navigate") {
+    const actualizar = fetch(req)
+      .then((res) => {
+        const copia = res.clone();
+        return caches.open(CACHE).then((c) => c.put("./index.html", copia)).then(() => res);
+      })
+      .catch(() => null);
+
+    ev.waitUntil(actualizar);   // sincrono: mantiene vivo el worker hasta guardar
     ev.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copia = res.clone();
-          caches.open(CACHE).then((c) => c.put("./index.html", copia));
-          return res;
-        })
-        .catch(() => caches.match("./index.html").then((r) => r || caches.match("./")))
+      caches.match("./index.html")
+        .then((hit) => hit || actualizar.then((res) => res || fetch(req)))
     );
     return;
   }
