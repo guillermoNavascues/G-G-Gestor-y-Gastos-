@@ -19,7 +19,9 @@ depende de ninguna tienda de aplicaciones.
 - **Metas de ahorro:** varias compras concretas a la vez, ordenadas por
   prioridad. Se aporta con un movimiento de tipo *Meta*, como cualquier otro
   gasto, así que lo acumulado es dinero realmente apartado y no una promesa.
-  El ritmo y la fecha estimada salen de lo que de verdad has ido aportando.
+  Cada meta dice cuánto le falta y para cuándo: con una aportación mensual
+  prevista mientras no hayas aportado nada, y con tu ritmo real en cuanto
+  empiezas — describe lo que haces, no lo que dijiste que harías.
 
   Entre todas las metas no pueden llevarse más de **el sobre de ocio + un
   10 % del sobre de ahorro** al mes. De los esenciales, nada. El límite lo

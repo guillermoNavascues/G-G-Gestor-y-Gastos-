@@ -494,7 +494,8 @@ function normalizarConfig(c){
   if (!c.metas) c.metas = [];
   if (c.meta && +c.meta.objetivo > 0){
     c.metas.push({id: uid(), nombre: c.meta.nombre || "Ahorro especial",
-                  objetivo: +c.meta.objetivo || 0});
+                  objetivo: +c.meta.objetivo || 0,
+                  aportacion: +c.meta.aportacion || 0});
   }
   // Hay que guardar la conversión en cuanto ocurre: el id de la meta se
   // genera al vuelo, y si no se persiste saldría uno distinto en cada
@@ -695,22 +696,30 @@ function estadoMetas(){
     var obj = +m.objetivo || 0;
     var tiene = acum[m.id] || 0;
     var restante = Math.max(0, obj - tiene);
-    var ritmo = 0, faltan = null, fecha = null;
+    var previsto = +m.aportacion || 0;
+    var real = 0;
 
+    // Si ya has aportado, manda tu ritmo real: describe lo que haces, no lo
+    // que dijiste que harías. Mientras no haya nada, se proyecta con lo previsto.
     if (primer[m.id] && tiene > 0){
       var ini = mesDesde(primer[m.id]);
       var n = (hoy.getFullYear()-ini.getFullYear())*12 + (hoy.getMonth()-ini.getMonth()) + 1;
       if (n < 1) n = 1;
-      ritmo = tiene / n;
-      if (restante > 0){
-        faltan = Math.ceil(restante / ritmo);
-        var f = new Date(hoy.getFullYear(), hoy.getMonth() + faltan, 1);
-        fecha = f.toLocaleDateString("es-ES", {month:"long", year:"numeric"});
-      }
+      real = tiene / n;
+    }
+
+    var ritmo = real > 0 ? real : previsto;
+    var faltan = null, fecha = null;
+    if (ritmo > 0 && restante > 0){
+      faltan = Math.ceil(restante / ritmo);
+      var f = new Date(hoy.getFullYear(), hoy.getMonth() + faltan, 1);
+      fecha = f.toLocaleDateString("es-ES", {month:"long", year:"numeric"});
     }
 
     return {id: m.id, nombre: m.nombre, prioridad: i + 1, objetivo: obj,
-            acumulado: tiene, restante: restante, ritmo: ritmo,
+            acumulado: tiene, restante: restante,
+            ritmo: ritmo, previsto: previsto, real: real,
+            esPrevision: !(real > 0) && previsto > 0,
             faltan: faltan, fecha: fecha,
             pct: obj > 0 ? Math.min(100, Math.max(0, tiene / obj * 100)) : 0};
   });
@@ -822,12 +831,13 @@ function renderFoco(k, c){
           var pie;
           if (mt.restante <= 0 && mt.objetivo > 0) {
             pie = '<span class="mhecha">Conseguida</span>';
-          } else if (mt.acumulado <= 0) {
-            pie = 'Sin aportaciones todavía';
-          } else {
-            pie = 'Faltan ' + money(mt.restante) + ' · a ' + money(mt.ritmo) + '/mes' +
+          } else if (mt.ritmo > 0) {
+            pie = 'Faltan ' + money(mt.restante) + ' · ' +
+                  (mt.esPrevision ? 'previstos ' : 'a ') + money(mt.ritmo) + '/mes' +
                   (mt.faltan ? ', ' + mt.faltan + (mt.faltan === 1 ? ' mes' : ' meses') +
                                ' (' + mt.fecha + ')' : '');
+          } else {
+            pie = 'Faltan ' + money(mt.restante) + ' · pon cuánto aportarás al mes';
           }
           return '<div class="mrow">' +
             '<div class="mcab">' +
@@ -1353,6 +1363,10 @@ function pintarAjustes(){
   if (pestana === "meta"){
     var ms = c.metas || [];
     var est = estadoMetas();
+    var tope = topeMetas(null);
+    var sumaPrev = 0;
+    ms.forEach(function(x){ sumaPrev += +x.aportacion || 0; });
+    var pasado = sumaPrev > tope.total + 0.005;
     cuerpo =
       '<p class="nota" style="margin-top:0">Ahorra para compras concretas. El número es la prioridad: usa las flechas para cambiarlo.</p>' +
       '<div class="listaed">' +
@@ -1362,13 +1376,22 @@ function pintarAjustes(){
               '<button type="button" data-sube="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir prioridad">&#9650;</button>' +
               '<button type="button" data-baja="' + i + '"' + (i === ms.length - 1 ? ' disabled' : '') + ' aria-label="Bajar prioridad">&#9660;</button>' +
             '</div>' +
-            '<div class="g"><b>' + mt.prioridad + '. ' + esc(mt.nombre) + '</b>' +
-              '<span>' + money(mt.acumulado) + ' de ' + money(mt.objetivo) +
-                (mt.restante <= 0 && mt.objetivo > 0 ? ' · conseguida' : '') + '</span></div>' +
+            '<div class="g" style="display:grid;gap:6px">' +
+              '<input type="text" data-mn="' + i + '" value="' + esc(mt.nombre) + '" aria-label="Nombre" style="font-size:13.5px;padding:7px 9px">' +
+              '<div class="fila2" style="gap:6px">' +
+                '<input type="number" data-mo="' + i + '" inputmode="decimal" step="0.01" min="0" value="' + (mt.objetivo || "") + '" aria-label="Cuánto cuesta" style="font-size:12.5px;padding:6px 9px">' +
+                '<input type="number" data-ma="' + i + '" inputmode="decimal" step="0.01" min="0" placeholder="al mes" value="' + (ms[i].aportacion || "") + '" aria-label="Aportación prevista al mes" style="font-size:12.5px;padding:6px 9px">' +
+              '</div>' +
+              '<span style="font-size:10.5px;color:var(--ink-3)">Llevas ' + money(mt.acumulado) +
+                (mt.faltan ? ' · ' + mt.faltan + (mt.faltan === 1 ? ' mes' : ' meses') + ' para completarla' : '') + '</span>' +
+            '</div>' +
             '<button class="x" data-mx="' + i + '" aria-label="Quitar meta"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>' +
           '</div>';
         }).join("") : '<p class="nota" style="margin:0">Todavía no has creado ninguna.</p>') +
       '</div>' +
+      (ms.length ? '<div class="tope ' + (pasado ? 'mal' : '') + '">Previsto ' + money(sumaPrev) +
+        ' al mes entre todas · tope ' + money(tope.total) +
+        (pasado ? ' — no te va a dar' : '') + '</div>' : '') +
       '<div class="fila2">' +
         '<div class="campo"><label for="mtNom">Nueva meta</label>' +
           '<input type="text" id="mtNom" placeholder="Un coche"></div>' +
@@ -1376,8 +1399,9 @@ function pintarAjustes(){
           '<input type="number" id="mtObj" inputmode="decimal" step="0.01" min="0" placeholder="0,00"></div>' +
       '</div>' +
       '<button class="add" id="mtAdd">+ Añadir meta</button>' +
+      (ms.length ? '<div class="acciones"><button class="btn" id="mtGuardar">Guardar cambios</button></div>' : '') +
       '<p class="nota" style="margin-top:14px">Para aportar, toca el <b>+</b> de la pantalla principal y elige <b>Meta</b>. ' +
-        'Entre todas no pueden llevarse más de ' + money(topeMetas(null).total) + ' al mes.</p>';
+        'La aportación mensual es una previsión: sirve para estimar la fecha mientras no haya aportaciones reales.</p>';
   }
 
   document.getElementById("ajBody").innerHTML =
@@ -1440,6 +1464,21 @@ function pintarAjustes(){
         guardarConfig(n); pintarAjustes();
       };
     });
+    var mtG = document.getElementById("mtGuardar");
+    if (mtG) mtG.onclick = function(){
+      var n = JSON.parse(JSON.stringify(cfg()));
+      Array.prototype.forEach.call(body.querySelectorAll("[data-mn]"), function(el){
+        n.metas[+el.dataset.mn].nombre = el.value.trim() || "Meta";
+      });
+      Array.prototype.forEach.call(body.querySelectorAll("[data-mo]"), function(el){
+        n.metas[+el.dataset.mo].objetivo = parseFloat(String(el.value).replace(",", ".")) || 0;
+      });
+      Array.prototype.forEach.call(body.querySelectorAll("[data-ma]"), function(el){
+        n.metas[+el.dataset.ma].aportacion = parseFloat(String(el.value).replace(",", ".")) || 0;
+      });
+      guardarConfig(n);
+      dlgAj.close();
+    };
     document.getElementById("mtAdd").onclick = function(){
       var nom = document.getElementById("mtNom").value.trim();
       var obj = parseFloat(String(document.getElementById("mtObj").value).replace(",", ".")) || 0;

@@ -247,7 +247,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v8";
+const VERSION = "v9";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.
