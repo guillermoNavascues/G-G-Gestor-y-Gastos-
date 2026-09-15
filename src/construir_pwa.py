@@ -61,8 +61,8 @@ src = CABECERA + src + u"\n</body>\n</html>\n"
 # ------------------------------------------------- 2. pestana nueva en ajustes
 src = sustituir(
     src,
-    u'[["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]]',
-    u'[["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]]',
+    u'[["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]]',
+    u'[["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]]',
     "pestanas")
 
 
@@ -132,7 +132,7 @@ function importarCopia(fichero){
       avisoDatos("mal", "Ese fichero no es una copia de G&G. Busca el .json que exportaste.");
       return;
     }
-    if (d.config) { S.config = d.config; almacen.escribir("config/app", "config", d.config); }
+    if (d.config) { S.config = normalizarConfig(d.config); almacen.escribir("config/app", "config", S.config); }
     var n = 0;
     Object.keys(d.meses || {}).forEach(function(id){
       S.meses[id] = d.meses[id];
@@ -247,7 +247,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v7";
+const VERSION = "v8";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.

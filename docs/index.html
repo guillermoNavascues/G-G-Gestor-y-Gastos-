@@ -124,6 +124,7 @@ button{font:inherit; color:inherit; cursor:pointer}
 .bar i{display:block; height:100%}
 .bar .fill{background:var(--c)}
 .bar .fill.over{background:var(--danger)}
+.bar .apart{background:var(--c); opacity:.62}
 .bar .pend{background:var(--c); opacity:.32}
 
 /* ---------- tira de foco ---------- */
@@ -138,10 +139,23 @@ button{font:inherit; color:inherit; cursor:pointer}
 .tarj.mini b{display:block; font-size:20px; font-weight:700; letter-spacing:-.03em; margin-top:4px; line-height:1.05}
 .tarj.mini b.neg{color:var(--danger)}
 .tarj.mini span.pie{display:block; font-size:10.5px; color:var(--ink-3); margin-top:3px; line-height:1.3}
-.tarj.meta{border-left:3px solid var(--o)}
-.metafila{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin:3px 0 9px}
-.metafila .v{font-size:23px; font-weight:700; letter-spacing:-.03em}
-.metafila .de{font-size:12px; color:var(--ink-3); font-weight:600}
+.tarj.metas{border-left:3px solid var(--o)}
+.mrow{padding:11px 0; border-bottom:1px solid var(--line-soft)}
+.mrow:last-child{border-bottom:0; padding-bottom:0}
+.mrow:first-of-type{padding-top:8px}
+.mcab{display:flex; align-items:baseline; gap:8px}
+.mpri{font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600; color:var(--o); flex:none}
+.mnom{font-size:13.5px; font-weight:600; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.mimp{font-size:13px; font-weight:600; flex:none}
+.mimp em{font-style:normal; color:var(--ink-3); font-weight:500}
+.mrow .bar{margin:7px 0 5px}
+.mpie{font-size:10.5px; color:var(--ink-3); line-height:1.35}
+.mhecha{color:var(--a); font-weight:600}
+.ord{display:flex; flex-direction:column; gap:2px; flex:none}
+.ord button{border:1px solid var(--line); background:var(--surface-2); color:var(--ink-2);
+  border-radius:6px; padding:1px 5px; font-size:10px; line-height:1.5}
+.ord button:disabled{opacity:.3}
+.aviso-mov{font-size:12px; font-weight:600; color:var(--danger); margin:-4px 0 12px; line-height:1.4}
 .tope{font-size:11.5px; font-weight:600; margin:-4px 0 12px}
 .tope.mal{color:var(--danger)}
 .tarj.cap{border-left:3px solid var(--a)}
@@ -408,7 +422,7 @@ var ROLES = {ingresos:"Entra la nómina", gasto:"Gasto diario", ahorro:"Ahorro",
 var CONFIG_DEF = {
   ingresoBase: 0,
   pct: {e:50, o:30, a:20},
-  meta: null,
+  metas: [],
   cuentas: CUENTAS_DEF,
   categorias: CATS_DEF,
   fijos: []
@@ -499,6 +513,34 @@ var S = {
 };
 
 function cfg(){ return S.config || CONFIG_DEF; }
+
+// La versión anterior guardaba una sola meta con aportación mensual.
+// Se convierte en la primera de la lista y se olvida la aportación: ahora
+// lo que cuenta es lo que se aporta de verdad, no lo que se prometió.
+var configMigrada = false;
+
+function normalizarConfig(c){
+  configMigrada = false;
+  if (!c) return c;
+  if (!c.metas) c.metas = [];
+  if (c.meta && +c.meta.objetivo > 0){
+    c.metas.push({id: uid(), nombre: c.meta.nombre || "Ahorro especial",
+                  objetivo: +c.meta.objetivo || 0});
+  }
+  // Hay que guardar la conversión en cuanto ocurre: el id de la meta se
+  // genera al vuelo, y si no se persiste saldría uno distinto en cada
+  // carga, dejando huérfanas las aportaciones que apuntaban al anterior.
+  if (c.meta !== undefined || c.rollover !== undefined) configMigrada = true;
+  delete c.meta;
+  delete c.rollover;
+  return c;
+}
+
+function metaPorId(id){
+  var l = cfg().metas || [];
+  for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+  return null;
+}
 function movs(id){ var m = S.meses[id]; return (m && m.movimientos) || []; }
 function cat(id){
   var l = cfg().categorias;
@@ -527,11 +569,7 @@ function calcular(id){
 
   var base = (+c.ingresoBase||0) + extra;
 
-  var asignado = {
-    e: base * (c.pct.e||0)/100,
-    o: base * (c.pct.o||0)/100,
-    a: base * (c.pct.a||0)/100
-  };
+  var asignado = asignadoMes(id);
 
   // Los sobres son SIEMPRE el porcentaje del ingreso. Lo que sobra a fin
   // de mes no engorda ninguna asignación: se convierte en ahorro, que es
@@ -556,21 +594,18 @@ function calcular(id){
     pendientes.push(f);
   }
 
-  // La meta de ahorro especial reserva parte del ocio y, si no llega, un
-  // pellizco del sobre de ahorro. De esenciales no se toca nada nunca.
-  var rep = repartoMeta(asignado);
-  if (rep){
-    comprometido.o += rep.ocio;
-    comprometido.a += rep.ahorro;
-    pendientes.push({id:"__meta", nom:c.meta.nombre || "Ahorro especial",
-                     importe: rep.total, esMeta:true});
-  }
+  // Lo aportado a las metas sale del ocio y, si no llega, de hasta un 10%
+  // del sobre de ahorro. De esenciales no sale nada nunca.
+  var aportado = metasDelMes(id);
+  var tope = topeMetas(asignado);
+  var apartado = {e: 0, o: Math.min(aportado, tope.ocio), a: 0};
+  apartado.a = Math.min(aportado - apartado.o, tope.ahorro);
 
   return {
     base: base, extra: extra,
-    asignado: asignado, gastado: gastado,
+    asignado: asignado, gastado: gastado, apartado: apartado,
     comprometido: comprometido, pendientes: pendientes,
-    fijosPagados: pagados, meta: rep
+    fijosPagados: pagados
   };
 }
 
@@ -643,58 +678,73 @@ function ahorroTotal(){
           demas: total - obligatorio, meses: usados};
 }
 
-// Tope de lo que puede absorber la meta: todo el ocio y un 10% del ahorro.
-// De esenciales, nada. Nunca.
-function topeMeta(asignado){
-  var a = asignado || null;
-  if (!a){
-    var c = cfg(), base = +c.ingresoBase || 0;
-    a = {o: base*(c.pct.o||0)/100, a: base*(c.pct.a||0)/100};
-  }
-  var ocio = a.o, ahorro = a.a * 0.10;
-  return {ocio: ocio, ahorro: ahorro, total: ocio + ahorro};
+// Los tres sobres de un mes, siempre el porcentaje exacto del ingreso.
+function asignadoMes(id){
+  var c = cfg(), b = balanceMes(movs(id));
+  var base = (+c.ingresoBase || 0) + b.extra;
+  return {e: base*(c.pct.e||0)/100, o: base*(c.pct.o||0)/100, a: base*(c.pct.a||0)/100};
 }
 
-// De dónde sale la aportación de este mes: primero el ocio, y sólo si no
-// llega, hasta un 10% del sobre de ahorro.
-function repartoMeta(asignado){
-  var m = cfg().meta;
-  if (!m || !(+m.aportacion > 0) || !(+m.objetivo > 0)) return null;
-  var tope = topeMeta(asignado);
-  var cuota = Math.min(+m.aportacion, tope.total);
-  var ocio = Math.min(cuota, tope.ocio);
-  return {ocio: ocio, ahorro: cuota - ocio, total: cuota};
+// Tope que pueden absorber las metas en un mes: todo el ocio y un 10% del
+// sobre de ahorro. De esenciales, nada. Nunca.
+function topeMetas(asignado){
+  var a = asignado || asignadoMes(S.mes);
+  return {ocio: a.o, ahorro: a.a * 0.10, total: a.o + a.a * 0.10};
 }
 
-// Estado de la meta: cuánto lleva, cuánto falta y para cuándo.
-function metaEstado(){
-  var m = cfg().meta;
-  if (!m || !(+m.objetivo > 0)) return null;
+// Lo aportado a metas en un mes (las retiradas van en negativo y liberan).
+function metasDelMes(id){
+  var t = 0;
+  movs(id).forEach(function(m){ if (m.tipo === "meta") t += (+m.importe || 0); });
+  return t;
+}
 
-  var cuota = repartoMeta(null);
-  cuota = cuota ? cuota.total : 0;
+// Cuánto más se puede destinar a metas este mes sin saltarse el tope.
+function margenMetas(id){
+  return Math.max(0, topeMetas(asignadoMes(id)).total - metasDelMes(id));
+}
 
-  var ini = m.desde ? mesDesde(m.desde) : new Date();
+// Estado de cada meta, en orden de prioridad. Lo acumulado son aportaciones
+// reales; el ritmo y la fecha salen de lo que de verdad has ido apartando,
+// no de lo que dijiste que aportarías.
+function estadoMetas(){
+  var defs = cfg().metas || [];
+  if (!defs.length) return [];
+
+  var acum = {}, primer = {};
+  var meses = mesesConocidos();
+  Object.keys(meses).sort().forEach(function(id){
+    ((meses[id] && meses[id].movimientos) || []).forEach(function(mv){
+      if (mv.tipo !== "meta" || !mv.metaId) return;
+      acum[mv.metaId] = (acum[mv.metaId] || 0) + (+mv.importe || 0);
+      if (!primer[mv.metaId]) primer[mv.metaId] = id;
+    });
+  });
+
   var hoy = new Date();
-  var n = (hoy.getFullYear()-ini.getFullYear())*12 + (hoy.getMonth()-ini.getMonth()) + 1;
-  if (n < 0) n = 0;
+  return defs.map(function(m, i){
+    var obj = +m.objetivo || 0;
+    var tiene = acum[m.id] || 0;
+    var restante = Math.max(0, obj - tiene);
+    var ritmo = 0, faltan = null, fecha = null;
 
-  // No se puede haber apartado más de lo que realmente se ha ahorrado.
-  var disponible = ahorroTotal().total;
-  var acumulado = Math.max(0, Math.min(n * cuota, +m.objetivo, disponible));
-  var restante = Math.max(0, (+m.objetivo) - acumulado);
-  var faltan = cuota > 0 ? Math.ceil(restante / cuota) : null;
+    if (primer[m.id] && tiene > 0){
+      var ini = mesDesde(primer[m.id]);
+      var n = (hoy.getFullYear()-ini.getFullYear())*12 + (hoy.getMonth()-ini.getMonth()) + 1;
+      if (n < 1) n = 1;
+      ritmo = tiene / n;
+      if (restante > 0){
+        faltan = Math.ceil(restante / ritmo);
+        var f = new Date(hoy.getFullYear(), hoy.getMonth() + faltan, 1);
+        fecha = f.toLocaleDateString("es-ES", {month:"long", year:"numeric"});
+      }
+    }
 
-  var fecha = null;
-  if (faltan) {
-    var f = new Date(hoy.getFullYear(), hoy.getMonth() + faltan, 1);
-    fecha = f.toLocaleDateString("es-ES", {month:"long", year:"numeric"});
-  }
-
-  return {nombre: m.nombre || "Ahorro especial", objetivo: +m.objetivo,
-          cuota: cuota, acumulado: acumulado, restante: restante,
-          faltan: faltan, fecha: fecha,
-          pct: Math.min(100, acumulado / (+m.objetivo) * 100)};
+    return {id: m.id, nombre: m.nombre, prioridad: i + 1, objetivo: obj,
+            acumulado: tiene, restante: restante, ritmo: ritmo,
+            faltan: faltan, fecha: fecha,
+            pct: obj > 0 ? Math.min(100, Math.max(0, tiene / obj * 100)) : 0};
+  });
 }
 
 /* ============================ render ============================ */
@@ -735,13 +785,15 @@ function renderSobres(k){
   ["e","o","a"].forEach(function(b){
     var B = BUCKETS[b];
     var asig = k.asignado[b], gas = k.gastado[b], comp = k.comprometido[b];
-    var rest = asig - gas;
+    var apa = (k.apartado && k.apartado[b]) || 0;
+    var rest = asig - gas - apa;
     var pGas = asig > 0 ? clamp(gas/asig*100, 0, 100) : 0;
-    var pComp = asig > 0 ? clamp(comp/asig*100, 0, 100 - pGas) : 0;
-    var over = gas > asig;
-    var sub = comp > 0
-      ? money0(comp) + " comprometido"
-      : B.verbo.toLowerCase() + " " + money0(gas);
+    var pApa = asig > 0 ? clamp(apa/asig*100, 0, 100 - pGas) : 0;
+    var pComp = asig > 0 ? clamp(comp/asig*100, 0, 100 - pGas - pApa) : 0;
+    var over = gas + apa > asig;
+    var sub = apa > 0 ? money0(apa) + " en metas"
+            : comp > 0 ? money0(comp) + " comprometido"
+            : B.verbo.toLowerCase() + " " + money0(gas);
 
     html +=
       '<button class="sobre" data-b="' + b + '" aria-pressed="' + (S.filtro===b) + '"' +
@@ -751,6 +803,7 @@ function renderSobres(k){
         '<span class="rest num' + (rest < 0 ? ' neg' : '') + '">' + money0(rest) + '</span>' +
         '<span class="bar">' +
           '<i class="fill' + (over ? ' over' : '') + '" style="width:' + pGas.toFixed(1) + '%"></i>' +
+          '<i class="apart" style="width:' + pApa.toFixed(1) + '%"></i>' +
           '<i class="pend" style="width:' + pComp.toFixed(1) + '%"></i>' +
         '</span>' +
         '<span class="sub">' + sub + '</span>' +
@@ -790,26 +843,36 @@ function renderFoco(k, c){
       '</div>';
   }
 
-  // 1b — meta de ahorro especial
-  var mt = metaEstado();
-  if (mt){
+  // 1b — metas de ahorro, por orden de prioridad
+  var metas = estadoMetas();
+  if (metas.length){
     html +=
-      '<div class="tarj meta">' +
-        '<div class="lbl">Ahorro especial · ' + esc(mt.nombre) + '</div>' +
-        '<div class="metafila">' +
-          '<span class="v num">' + money(mt.acumulado) + '</span>' +
-          '<span class="de num">de ' + money(mt.objetivo) + '</span>' +
-        '</div>' +
-        '<span class="bar" style="--c:var(--o)">' +
-          '<i class="fill" style="width:' + mt.pct.toFixed(1) + '%"></i>' +
-        '</span>' +
-        '<p class="nota" style="margin:9px 0 0">' +
-          (mt.restante <= 0
-            ? '¡Ya lo tienes! Te sobran ' + money(mt.acumulado - mt.objetivo) + '.'
-            : 'Faltan ' + money(mt.restante) + ' · ' + money(mt.cuota) + ' al mes · ' +
-              (mt.faltan ? mt.faltan + (mt.faltan === 1 ? ' mes, hacia ' : ' meses, hacia ') + mt.fecha
-                         : 'sin aportación no avanza')) +
-        '</p>' +
+      '<div class="tarj metas">' +
+        '<div class="lbl">Metas de ahorro</div>' +
+        metas.map(function(mt){
+          var pie;
+          if (mt.restante <= 0 && mt.objetivo > 0) {
+            pie = '<span class="mhecha">Conseguida</span>';
+          } else if (mt.acumulado <= 0) {
+            pie = 'Sin aportaciones todavía';
+          } else {
+            pie = 'Faltan ' + money(mt.restante) + ' · a ' + money(mt.ritmo) + '/mes' +
+                  (mt.faltan ? ', ' + mt.faltan + (mt.faltan === 1 ? ' mes' : ' meses') +
+                               ' (' + mt.fecha + ')' : '');
+          }
+          return '<div class="mrow">' +
+            '<div class="mcab">' +
+              '<span class="mpri">' + mt.prioridad + '</span>' +
+              '<span class="mnom">' + esc(mt.nombre) + '</span>' +
+              '<span class="mimp num">' + money(mt.acumulado) +
+                ' <em>de ' + money(mt.objetivo) + '</em></span>' +
+            '</div>' +
+            '<span class="bar" style="--c:var(--o)">' +
+              '<i class="fill" style="width:' + mt.pct.toFixed(1) + '%"></i>' +
+            '</span>' +
+            '<div class="mpie">' + pie + '</div>' +
+          '</div>';
+        }).join("") +
       '</div>';
   }
 
@@ -818,12 +881,6 @@ function renderFoco(k, c){
     var totalPend = 0;
     k.pendientes.forEach(function(f){ totalPend += (+f.importe||0); });
     var filas = k.pendientes.map(function(f){
-      if (f.esMeta) {
-        return '<div class="fijo">' +
-          '<div class="n">' + esc(f.nom) + '<span>Ahorro especial · sale del ocio</span></div>' +
-          '<div class="im num">' + money(f.importe) + '</div>' +
-        '</div>';
-      }
       return '<div class="fijo">' +
         '<div class="n">' + esc(f.nom) + '<span>' + esc(cat(f.cat).nom) + ' · ' + esc(cuenta(f.cuenta).nom) + '</span></div>' +
         '<div class="im num">' + money(f.importe) + '</div>' +
@@ -924,6 +981,10 @@ function renderLista(k){
         b = "a"; etiqueta = "Ingreso"; clase = "pos"; signo = "+" + money(m.importe);
       } else if (m.tipo === "traspaso"){
         b = null; etiqueta = "Traspaso"; clase = "nul"; signo = money(m.importe);
+      } else if (m.tipo === "meta"){
+        var mm = metaPorId(m.metaId);
+        b = "o"; etiqueta = mm ? mm.nombre : "Meta borrada"; clase = "nul";
+        signo = (+m.importe < 0 ? "↩ " + money(-m.importe) : "→ " + money(m.importe));
       } else {
         b = cat(m.cat).b; etiqueta = cat(m.cat).nom;
         signo = (+m.importe < 0 ? "+" + money(-m.importe) : "−" + money(m.importe));
@@ -1075,9 +1136,9 @@ function pintarMov(m){
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></h2>' +
 
     '<div class="seg" role="group" style="margin-bottom:14px">' +
-      ['gasto','ingreso','traspaso'].map(function(x){
+      ['gasto','ingreso','traspaso','meta'].map(function(x){
         return '<button type="button" data-tipo="' + x + '" aria-pressed="' + (t===x) + '">' +
-          (x==="gasto"?"Gasto":x==="ingreso"?"Ingreso extra":"Traspaso") + '</button>';
+          (x==="gasto"?"Gasto":x==="ingreso"?"Ingreso":x==="traspaso"?"Traspaso":"Meta") + '</button>';
       }).join("") +
     '</div>' +
 
@@ -1089,7 +1150,8 @@ function pintarMov(m){
     '<div class="campo">' +
       '<label for="mConcepto">Concepto</label>' +
       '<input type="text" id="mConcepto" placeholder="' +
-        (t==="gasto"?"Mercadona, cena con Ana…":t==="ingreso"?"Paga extra, factura freelance…":"Traspaso mensual") +
+        (t==="gasto"?"Mercadona, cena con Ana…":t==="ingreso"?"Paga extra, factura freelance…":
+         t==="meta"?"Aportación del mes":"Traspaso mensual") +
         '" value="' + esc(m ? m.concepto : "") + '">' +
     '</div>' +
 
@@ -1101,6 +1163,23 @@ function pintarMov(m){
       '<label class="check"><input type="checkbox" id="mDevol"' + (devol ? " checked" : "") + '>' +
         '<span>Es una devolución o un Bizum que me han devuelto</span></label>'
     : '') +
+
+    (t === "meta" ? (
+      (c.metas && c.metas.length) ?
+        '<div class="campo">' +
+          '<label for="mMeta">A qué meta</label>' +
+          '<select id="mMeta">' +
+            c.metas.map(function(x, i){
+              return '<option value="' + esc(x.id) + '"' + ((m && m.metaId === x.id) || (!m && i === 0) ? " selected" : "") + '>' +
+                (i+1) + '. ' + esc(x.nombre) + '</option>';
+            }).join("") +
+          '</select>' +
+        '</div>' +
+        '<label class="check"><input type="checkbox" id="mSacar"' + (devol ? " checked" : "") + '>' +
+          '<span>Sacar dinero de esta meta</span></label>' +
+        '<div id="mAviso"></div>'
+      : '<p class="nota">Todavía no has creado ninguna meta. Ve a <b>Ajustes → Metas</b> y crea una.</p>'
+    ) : '') +
 
     (t === "traspaso" ?
       '<div class="fila2">' +
@@ -1120,6 +1199,9 @@ function pintarMov(m){
     : '') +
 
     (t === "ingreso" ? '<p class="nota">Un ingreso extra se suma a la base del mes y hace crecer los tres sobres automáticamente.</p>' : '') +
+
+    (t === "meta" && c.metas && c.metas.length ?
+      '<p class="nota">Puedes destinar ' + money(margenMetas(S.mes)) + ' más este mes. Sale del ocio y de hasta un 10% del sobre de ahorro; de los esenciales, nada.</p>' : '') +
 
     '<div class="acciones">' +
       (esNuevo ? '' : '<button class="btn del" id="mBorrar">Borrar</button>') +
@@ -1148,6 +1230,27 @@ function pintarMov(m){
     };
     if (borradorTipo === "gasto") reg.cat = document.getElementById("mCat").value;
     if (borradorTipo === "traspaso") reg.destino = document.getElementById("mDestino").value;
+
+    if (borradorTipo === "meta"){
+      var selMeta = document.getElementById("mMeta");
+      if (!selMeta) return;                       // sin metas creadas, no hay nada que aportar
+      reg.metaId = selMeta.value;
+      var saca = document.getElementById("mSacar");
+      if (saca && saca.checked) {
+        reg.importe = -v;
+      } else {
+        // El tope es del mes al que se imputa, y al editar no cuenta contra sí mismo.
+        var mesReg = reg.fecha.slice(0, 7);
+        var propio = (m && m.tipo === "meta" && m.fecha.slice(0,7) === mesReg && +m.importe > 0)
+                     ? (+m.importe) : 0;
+        var margen = margenMetas(mesReg) + propio;
+        if (v > margen + 0.005){
+          avisoMov("Este mes sólo puedes destinar " + money(margen) + " más a metas. " +
+                   "Sale del ocio y de hasta un 10% del sobre de ahorro; de los esenciales, nada.");
+          return;
+        }
+      }
+    }
     if (m && m.fijoId) reg.fijoId = m.fijoId;
 
     if (m) actualizarMov(reg); else anadirMov(reg);
@@ -1156,6 +1259,11 @@ function pintarMov(m){
 
   var del = document.getElementById("mBorrar");
   if (del) del.onclick = function(){ borrarMov(m.id); dlgMov.close(); };
+}
+
+function avisoMov(texto){
+  var el = document.getElementById("mAviso");
+  if (el) el.innerHTML = '<p class="aviso-mov">' + esc(texto) + '</p>';
 }
 
 /* ============================ hoja: ajustes ============================ */
@@ -1274,29 +1382,33 @@ function pintarAjustes(){
   }
 
   if (pestana === "meta"){
-    var m = c.meta || {};
-    var tope = topeMeta(null);
-    var ap = +m.aportacion || 0;
-    var pasado = ap > tope.total;
+    var ms = c.metas || [];
+    var est = estadoMetas();
     cuerpo =
-      '<p class="nota" style="margin-top:0">Aparta dinero cada mes para una compra concreta: un coche, un viaje, lo que sea. La app te dice cuánto falta y para cuándo.</p>' +
-      '<div class="campo"><label for="mtNom">Qué quieres comprar</label>' +
-        '<input type="text" id="mtNom" placeholder="Un coche" value="' + esc(m.nombre || "") + '"></div>' +
-      '<div class="fila2">' +
-        '<div class="campo"><label for="mtObj">Cuánto cuesta</label>' +
-          '<input type="number" id="mtObj" inputmode="decimal" step="0.01" min="0" placeholder="0,00" value="' + (m.objetivo || "") + '"></div>' +
-        '<div class="campo"><label for="mtApo">Al mes</label>' +
-          '<input type="number" id="mtApo" inputmode="decimal" step="0.01" min="0" placeholder="0,00" value="' + (m.aportacion || "") + '"></div>' +
+      '<p class="nota" style="margin-top:0">Ahorra para compras concretas. El número es la prioridad: usa las flechas para cambiarlo.</p>' +
+      '<div class="listaed">' +
+        (ms.length ? est.map(function(mt, i){
+          return '<div class="item">' +
+            '<div class="ord">' +
+              '<button type="button" data-sube="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Subir prioridad">&#9650;</button>' +
+              '<button type="button" data-baja="' + i + '"' + (i === ms.length - 1 ? ' disabled' : '') + ' aria-label="Bajar prioridad">&#9660;</button>' +
+            '</div>' +
+            '<div class="g"><b>' + mt.prioridad + '. ' + esc(mt.nombre) + '</b>' +
+              '<span>' + money(mt.acumulado) + ' de ' + money(mt.objetivo) +
+                (mt.restante <= 0 && mt.objetivo > 0 ? ' · conseguida' : '') + '</span></div>' +
+            '<button class="x" data-mx="' + i + '" aria-label="Quitar meta"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>' +
+          '</div>';
+        }).join("") : '<p class="nota" style="margin:0">Todavía no has creado ninguna.</p>') +
       '</div>' +
-      '<div class="tope ' + (pasado ? 'mal' : '') + '" id="mtTope">Máximo ' + money(tope.total) + ' al mes' +
-        (pasado ? ' — te has pasado, se aplicará el máximo' : '') + '</div>' +
-      '<p class="nota">Sale del ocio (' + money(tope.ocio) + ') y, si no llega, de hasta un 10% del sobre de ahorro (' + money(tope.ahorro) + '). De los esenciales no se toca nada.</p>' +
-      '<div class="campo"><label for="mtDesde">Empecé a apartar en</label>' +
-        '<input type="month" id="mtDesde" value="' + esc(m.desde || mesId(new Date())) + '"></div>' +
-      '<div class="acciones">' +
-        (c.meta ? '<button class="btn del" id="mtBorrar">Quitar</button>' : '') +
-        '<button class="btn" id="mtGuardar">Guardar</button>' +
-      '</div>';
+      '<div class="fila2">' +
+        '<div class="campo"><label for="mtNom">Nueva meta</label>' +
+          '<input type="text" id="mtNom" placeholder="Un coche"></div>' +
+        '<div class="campo"><label for="mtObj">Cuánto cuesta</label>' +
+          '<input type="number" id="mtObj" inputmode="decimal" step="0.01" min="0" placeholder="0,00"></div>' +
+      '</div>' +
+      '<button class="add" id="mtAdd">+ Añadir meta</button>' +
+      '<p class="nota" style="margin-top:14px">Para aportar, toca el <b>+</b> de la pantalla principal y elige <b>Meta</b>. ' +
+        'Entre todas no pueden llevarse más de ' + money(topeMetas(null).total) + ' al mes.</p>';
   }
 
   if (pestana === "datos"){
@@ -1318,7 +1430,7 @@ function pintarAjustes(){
     '<h2>Ajustes<button class="ico" id="aCerrar" aria-label="Cerrar">' +
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></h2>' +
     '<div class="tabs" role="group">' +
-      [["general","Reparto"],["meta","Meta"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]].map(function(p){
+      [["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]].map(function(p){
         return '<button type="button" data-tab="' + p[0] + '" aria-pressed="' + (pestana===p[0]) + '">' + p[1] + '</button>';
       }).join("") +
     '</div>' + cuerpo;
@@ -1354,34 +1466,34 @@ function pintarAjustes(){
     };
   }
 
-  // meta de ahorro especial
+  // metas de ahorro
   if (pestana === "meta"){
-    var mtApo = document.getElementById("mtApo");
-    if (mtApo) mtApo.oninput = function(){
-      var t = topeMeta(null), v = parseFloat(String(mtApo.value).replace(",", ".")) || 0;
-      var d = document.getElementById("mtTope");
-      d.className = "tope " + (v > t.total ? "mal" : "");
-      d.textContent = "Máximo " + money(t.total) + " al mes" +
-        (v > t.total ? " — te has pasado, se aplicará el máximo" : "");
+    var mover = function(de, a){
+      var n = JSON.parse(JSON.stringify(cfg()));
+      var t = n.metas[de]; n.metas[de] = n.metas[a]; n.metas[a] = t;
+      guardarConfig(n); pintarAjustes();
     };
-    document.getElementById("mtGuardar").onclick = function(){
+    Array.prototype.forEach.call(body.querySelectorAll("[data-sube]"), function(b){
+      b.onclick = function(){ var i = +b.dataset.sube; mover(i, i - 1); };
+    });
+    Array.prototype.forEach.call(body.querySelectorAll("[data-baja]"), function(b){
+      b.onclick = function(){ var i = +b.dataset.baja; mover(i, i + 1); };
+    });
+    Array.prototype.forEach.call(body.querySelectorAll("[data-mx]"), function(b){
+      b.onclick = function(){
+        var n = JSON.parse(JSON.stringify(cfg()));
+        n.metas.splice(+b.dataset.mx, 1);
+        guardarConfig(n); pintarAjustes();
+      };
+    });
+    document.getElementById("mtAdd").onclick = function(){
       var nom = document.getElementById("mtNom").value.trim();
       var obj = parseFloat(String(document.getElementById("mtObj").value).replace(",", ".")) || 0;
-      var apo = parseFloat(String(document.getElementById("mtApo").value).replace(",", ".")) || 0;
-      if (!obj){ document.getElementById("mtObj").focus(); return; }
+      if (!nom || !obj){ document.getElementById(nom ? "mtObj" : "mtNom").focus(); return; }
       var n = JSON.parse(JSON.stringify(cfg()));
-      n.meta = {nombre: nom || "Ahorro especial", objetivo: obj,
-                aportacion: Math.min(apo, topeMeta(null).total),
-                desde: document.getElementById("mtDesde").value || mesId(new Date())};
-      guardarConfig(n);
-      dlgAj.close();
-    };
-    var mtDel = document.getElementById("mtBorrar");
-    if (mtDel) mtDel.onclick = function(){
-      var n = JSON.parse(JSON.stringify(cfg()));
-      n.meta = null;
-      guardarConfig(n);
-      dlgAj.close();
+      n.metas = n.metas || [];
+      n.metas.push({id: uid(), nombre: nom, objetivo: obj});
+      guardarConfig(n); pintarAjustes();
     };
   }
 
@@ -1494,7 +1606,7 @@ function importarCopia(fichero){
       avisoDatos("mal", "Ese fichero no es una copia de G&G. Busca el .json que exportaste.");
       return;
     }
-    if (d.config) { S.config = d.config; almacen.escribir("config/app", "config", d.config); }
+    if (d.config) { S.config = normalizarConfig(d.config); almacen.escribir("config/app", "config", S.config); }
     var n = 0;
     Object.keys(d.meses || {}).forEach(function(id){
       S.meses[id] = d.meses[id];
@@ -1553,7 +1665,8 @@ function cablearDatos(){
 
 function cargarLocal(){
   var c = almacen.local("config");
-  S.config = c || JSON.parse(JSON.stringify(CONFIG_DEF));
+  S.config = normalizarConfig(c || JSON.parse(JSON.stringify(CONFIG_DEF)));
+  if (configMigrada) almacen.escribir("config/app", "config", S.config);
   var m = almacen.local("mes:" + S.mes);
   if (m) S.meses[S.mes] = m;
   var p = almacen.local("mes:" + mesAnterior(S.mes));
@@ -1566,7 +1679,11 @@ function suscribirMes(){
   if (!almacen.db) return;
 
   S.desub.push(almacen.suscribir("config/app", "config", function(datos){
-    if (datos) { S.config = datos; render(); }
+    if (datos) {
+      S.config = normalizarConfig(datos);
+      if (configMigrada) almacen.escribir("config/app", "config", S.config);
+      render();
+    }
   }));
 
   [S.mes, mesAnterior(S.mes)].forEach(function(id){

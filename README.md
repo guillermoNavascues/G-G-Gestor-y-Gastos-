@@ -16,9 +16,14 @@ depende de ninguna tienda de aplicaciones.
 - **Capital ahorrado y Ahorros:** lo que sobró de esenciales y ocio este mes,
   y el total acumulado de todos los meses. Mover dinero al ahorro no cuenta
   como gasto: cambia de sitio y sigue siendo tuyo.
-- **Ahorro especial:** una meta de compra con aportación mensual. La app
-  calcula cuánto falta y para cuándo. Sólo puede beber del ocio y de un 10 %
-  del sobre de ahorro; de los esenciales, nada.
+- **Metas de ahorro:** varias compras concretas a la vez, ordenadas por
+  prioridad. Se aporta con un movimiento de tipo *Meta*, como cualquier otro
+  gasto, así que lo acumulado es dinero realmente apartado y no una promesa.
+  El ritmo y la fecha estimada salen de lo que de verdad has ido aportando.
+
+  Entre todas las metas no pueden llevarse más de **el sobre de ocio + un
+  10 % del sobre de ahorro** al mes. De los esenciales, nada. El límite lo
+  impone la app: una aportación que se pase no se guarda.
 - **Plan de traspasos al cobrar:** cuánto mover a cada cuenta el día de la
   nómina, según el papel que tenga asignado cada banco.
 - Devoluciones y Bizums recibidos restan del gasto en lugar de contar como ingreso.
