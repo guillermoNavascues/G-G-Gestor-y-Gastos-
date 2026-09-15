@@ -29,7 +29,11 @@ depende de ninguna tienda de aplicaciones.
 - **Plan de traspasos al cobrar:** cuánto mover a cada cuenta el día de la
   nómina, según el papel que tenga asignado cada banco.
 - Devoluciones y Bizums recibidos restan del gasto en lugar de contar como ingreso.
-- Los traspasos entre cuentas propias no tocan ningún sobre.
+- **El sobre de ahorro se cumple con traspasos, no gastando de él.** Muestra
+  el objetivo del mes y se marca como hecho cuando has movido esa cantidad a
+  la cuenta con rol *Ahorro*. Si retiras dinero de ahí, se desmarca sola: el
+  cómputo es neto.
+- Los traspasos entre cuentas propias no cuentan como gasto.
 - Los sobres son siempre el porcentaje exacto del ingreso: lo que sobra a fin
   de mes no los infla, pasa a los ahorros.
 - Copia de seguridad exportable e importable en `.json`.

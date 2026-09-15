@@ -99,6 +99,8 @@ button{font:inherit; color:inherit; cursor:pointer}
 .sobre .rest{font-size:19px; font-weight:700; letter-spacing:-.03em; line-height:1; margin-top:2px}
 .sobre .rest.neg{color:var(--danger)}
 .sobre .sub{font-size:10px; color:var(--ink-3); line-height:1.25}
+.sobre .sub.hecho{color:var(--a); font-weight:600}
+.sobre .sub.falta{color:var(--danger); font-weight:600}
 .bar{height:5px; border-radius:99px; background:var(--surface-3); display:flex; overflow:hidden}
 .bar i{display:block; height:100%}
 .bar .fill{background:var(--c)}
@@ -564,6 +566,20 @@ function calcular(id){
     pendientes.push(f);
   }
 
+  // El sobre de ahorro se cumple moviendo el dinero a la cuenta de ahorro.
+  // Cuenta el neto: lo que entra suma y lo que sacas resta, de modo que una
+  // retirada desmarca el mes ella sola.
+  var cAhorro = cuentaPorRol("ahorro");
+  var traspasado = 0;
+  if (cAhorro){
+    for (i = 0; i < lista.length; i++){
+      m = lista[i];
+      if (m.tipo !== "traspaso") continue;
+      if (m.destino === cAhorro.id) traspasado += (+m.importe || 0);
+      else if (m.cuenta === cAhorro.id) traspasado -= (+m.importe || 0);
+    }
+  }
+
   // Lo aportado a las metas sale del ocio y, si no llega, de hasta un 10%
   // del sobre de ahorro. De esenciales no sale nada nunca.
   var aportado = metasDelMes(id);
@@ -571,11 +587,19 @@ function calcular(id){
   var apartado = {e: 0, o: Math.min(aportado, tope.ocio), a: 0};
   apartado.a = Math.min(aportado - apartado.o, tope.ahorro);
 
+  // Lo que ya está cubierto del sobre de ahorro: lo traspasado más lo que
+  // hayas registrado como gasto de categoría de ahorro.
+  var objetivoAhorro = Math.max(0, asignado.a - apartado.a);
+  var cubiertoAhorro = traspasado + gastado.a;
+
   return {
     base: base, extra: extra,
     asignado: asignado, gastado: gastado, apartado: apartado,
     comprometido: comprometido, pendientes: pendientes,
-    fijosPagados: pagados
+    fijosPagados: pagados,
+    traspasado: traspasado, objetivoAhorro: objetivoAhorro,
+    cubiertoAhorro: cubiertoAhorro,
+    ahorroHecho: objetivoAhorro > 0 && cubiertoAhorro >= objetivoAhorro - 0.005
   };
 }
 
@@ -764,14 +788,39 @@ function renderSobres(k){
     var B = BUCKETS[b];
     var asig = k.asignado[b], gas = k.gastado[b], comp = k.comprometido[b];
     var apa = (k.apartado && k.apartado[b]) || 0;
-    var rest = asig - gas - apa;
-    var pGas = asig > 0 ? clamp(gas/asig*100, 0, 100) : 0;
-    var pApa = asig > 0 ? clamp(apa/asig*100, 0, 100 - pGas) : 0;
-    var pComp = asig > 0 ? clamp(comp/asig*100, 0, 100 - pGas - pApa) : 0;
-    var over = gas + apa > asig;
-    var sub = apa > 0 ? money0(apa) + " en metas"
-            : comp > 0 ? money0(comp) + " comprometido"
-            : B.verbo.toLowerCase() + " " + money0(gas);
+    var rest, pGas, pApa, pComp, over, sub, claseSub = "";
+
+    if (b === "a"){
+      // El ahorro no se gasta: se cumple. La cifra grande es el objetivo del
+      // mes y la barra mide cuánto has movido ya a la cuenta de ahorro.
+      var obj = k.objetivoAhorro, cub = k.cubiertoAhorro;
+      rest = obj;
+      pGas = obj > 0 ? clamp(cub/obj*100, 0, 100) : 0;
+      pApa = 0;
+      pComp = asig > 0 ? clamp(apa/asig*100, 0, 100 - pGas) : 0;
+      over = false;
+
+      if (k.ahorroHecho){
+        sub = "✓ Traspaso hecho"; claseSub = " hecho";
+      } else if (cub < -0.005){
+        sub = "retirados " + money0(-cub); claseSub = " falta";
+      } else if (cub > 0.005){
+        sub = money0(cub) + " de " + money0(obj);
+      } else if (apa > 0){
+        sub = money0(apa) + " en metas";
+      } else {
+        sub = "sin traspasar";
+      }
+    } else {
+      rest = asig - gas - apa;
+      pGas = asig > 0 ? clamp(gas/asig*100, 0, 100) : 0;
+      pApa = asig > 0 ? clamp(apa/asig*100, 0, 100 - pGas) : 0;
+      pComp = asig > 0 ? clamp(comp/asig*100, 0, 100 - pGas - pApa) : 0;
+      over = gas + apa > asig;
+      sub = apa > 0 ? money0(apa) + " en metas"
+          : comp > 0 ? money0(comp) + " comprometido"
+          : B.verbo.toLowerCase() + " " + money0(gas);
+    }
 
     html +=
       '<button class="sobre" data-b="' + b + '" aria-pressed="' + (S.filtro===b) + '"' +
@@ -784,7 +833,7 @@ function renderSobres(k){
           '<i class="apart" style="width:' + pApa.toFixed(1) + '%"></i>' +
           '<i class="pend" style="width:' + pComp.toFixed(1) + '%"></i>' +
         '</span>' +
-        '<span class="sub">' + sub + '</span>' +
+        '<span class="sub' + claseSub + '">' + sub + '</span>' +
       '</button>';
   });
   cont.innerHTML = html;
