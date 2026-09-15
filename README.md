@@ -123,10 +123,10 @@ todas formas.
 
 | Fase | Contenido | Estado |
 |------|-----------|--------|
-| 0 | App manual, tres sobres, gastos fijos, plan de traspasos, ahorro especial | ✅ |
+| 0 | App manual, tres sobres, gastos fijos, plan de traspasos, metas de ahorro | ✅ |
 | 1 | Importación de extractos CSV + motor de reglas de categorización | pendiente |
 | 2 | Conexión bancaria PSD2 vía GoCardless + backend + sincronización | pendiente |
-| 3 | Notificaciones, detección de recurrentes, varias metas a la vez | pendiente |
+| 3 | Notificaciones, detección de recurrentes, fondos para gastos anuales | pendiente |
 | 4 | Informes, patrimonio neto, exportación | pendiente |
 
 ### Sobre la conexión bancaria (Fase 2)
