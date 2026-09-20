@@ -34,6 +34,13 @@ depende de ninguna tienda de aplicaciones.
   la cuenta con rol *Ahorro*. Si retiras dinero de ahí, se desmarca sola: el
   cómputo es neto.
 - Los traspasos entre cuentas propias no cuentan como gasto.
+- **Efectivo.** Es una cuenta más: puedes pagar en metálico, ingresarlo en el
+  banco o sacarlo, con un traspaso normal. En *Ajustes → Cuentas*, el campo
+  **ya tenía** declara el dinero que había en cada sitio antes de empezar a
+  usar la app, para que cuente desde el primer día.
+- **Dónde está tu dinero:** el saldo de cada cuenta, calculado a partir del
+  saldo inicial y de todo lo registrado. Su total coincide con el de Ahorros:
+  son dos caminos al mismo número.
 - Los sobres son siempre el porcentaje exacto del ingreso: lo que sobra a fin
   de mes no los infla, pasa a los ahorros.
 - Copia de seguridad exportable e importable en `.json`.

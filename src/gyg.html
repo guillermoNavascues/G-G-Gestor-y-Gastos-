@@ -383,12 +383,14 @@ var CATS_DEF = [
 ];
 
 var CUENTAS_DEF = [
-  {id:"sab", nom:"Sabadell",       rol:"ingresos"},
-  {id:"tr",  nom:"Trade Republic", rol:"gasto"},
-  {id:"ob",  nom:"Openbank",       rol:"ahorro"}
+  {id:"sab", nom:"Sabadell",       rol:"ingresos", inicial:0},
+  {id:"tr",  nom:"Trade Republic", rol:"gasto",    inicial:0},
+  {id:"ob",  nom:"Openbank",       rol:"ahorro",   inicial:0},
+  {id:"efe", nom:"Efectivo",       rol:"efectivo", inicial:0}
 ];
 
-var ROLES = {ingresos:"Entra la nómina", gasto:"Gasto diario", ahorro:"Ahorro", otro:"Otra"};
+var ROLES = {ingresos:"Entra la nómina", gasto:"Gasto diario", ahorro:"Ahorro",
+             efectivo:"Efectivo", otro:"Otra"};
 
 var CONFIG_DEF = {
   ingresoBase: 0,
@@ -503,6 +505,18 @@ function normalizarConfig(c){
   // genera al vuelo, y si no se persiste saldría uno distinto en cada
   // carga, dejando huérfanas las aportaciones que apuntaban al anterior.
   if (c.meta !== undefined || c.rollover !== undefined) configMigrada = true;
+
+  // El efectivo también es tu dinero: si no hay una cuenta para él, se crea.
+  c.cuentas = c.cuentas || [];
+  var hayEfectivo = false;
+  for (var q = 0; q < c.cuentas.length; q++){
+    if (c.cuentas[q].inicial === undefined) c.cuentas[q].inicial = 0;
+    if (c.cuentas[q].rol === "efectivo") hayEfectivo = true;
+  }
+  if (!hayEfectivo){
+    c.cuentas.push({id: "efe", nom: "Efectivo", rol: "efectivo", inicial: 0});
+    configMigrada = true;
+  }
   delete c.meta;
   delete c.rollover;
   return c;
@@ -653,6 +667,53 @@ function sobranteMes(id){
   return ingreso * ((c.pct.e||0) + (c.pct.o||0)) / 100 - b.gasto;
 }
 
+// Dónde está tu dinero ahora mismo, cuenta por cuenta. Parte del saldo
+// inicial que declaraste y aplica todo lo registrado desde entonces.
+//
+// La nómina se imputa a la cuenta con rol Ingresos en cada mes con actividad,
+// porque no se registra como movimiento. Las aportaciones a metas no se restan:
+// reservan dinero, no lo sacan de la cuenta.
+function saldos(){
+  var c = cfg();
+  var mapa = {};
+  (c.cuentas || []).forEach(function(x){ mapa[x.id] = +x.inicial || 0; });
+
+  var cIng = cuentaPorRol("ingresos");
+  var meses = mesesConocidos();
+
+  Object.keys(meses).forEach(function(id){
+    var lista = (meses[id] && meses[id].movimientos) || [];
+    if (!lista.length) return;
+    if (cIng && mapa[cIng.id] !== undefined) mapa[cIng.id] += (+c.ingresoBase || 0);
+
+    lista.forEach(function(m){
+      var v = +m.importe || 0;
+      if (m.tipo === "ingreso"){
+        if (mapa[m.cuenta] !== undefined) mapa[m.cuenta] += v;
+      } else if (m.tipo === "gasto"){
+        if (mapa[m.cuenta] !== undefined) mapa[m.cuenta] -= v;
+      } else if (m.tipo === "traspaso"){
+        if (mapa[m.cuenta] !== undefined) mapa[m.cuenta] -= v;
+        if (mapa[m.destino] !== undefined) mapa[m.destino] += v;
+      }
+    });
+  });
+
+  var lista = (c.cuentas || []).map(function(x){
+    return {id: x.id, nom: x.nom, rol: x.rol, saldo: mapa[x.id] || 0};
+  });
+  var total = 0;
+  lista.forEach(function(x){ total += x.saldo; });
+  return {cuentas: lista, total: total};
+}
+
+// Lo que ya tenías antes de empezar a usar la app.
+function saldoInicialTotal(){
+  var t = 0;
+  (cfg().cuentas || []).forEach(function(x){ t += +x.inicial || 0; });
+  return t;
+}
+
 // Todos los ahorros acumulados, mes a mes.
 function ahorroTotal(){
   var meses = mesesConocidos();
@@ -668,7 +729,8 @@ function ahorroTotal(){
     usados++;
   });
 
-  return {total: total, obligatorio: obligatorio,
+  var inicial = saldoInicialTotal();
+  return {total: total + inicial, inicial: inicial, obligatorio: obligatorio,
           demas: total - obligatorio, meses: usados};
 }
 
@@ -851,7 +913,7 @@ function renderFoco(k, c){
 
   // 1 — lo ahorrado este mes y los ahorros totales
   var aho = ahorroTotal();
-  if (aho.meses > 0){
+  if (aho.meses > 0 || aho.inicial > 0){
     var sobra = sobranteMes(S.mes);
     var enCurso = S.mes === mesId(new Date());
     html +=
@@ -865,7 +927,11 @@ function renderFoco(k, c){
         '<div class="tarj mini">' +
           '<span class="lbl">Ahorros</span>' +
           '<b class="num' + (aho.total < 0 ? ' neg' : '') + '">' + money(aho.total) + '</b>' +
-          '<span class="pie">Total en ' + aho.meses + (aho.meses === 1 ? ' mes' : ' meses') + '</span>' +
+          '<span class="pie">' +
+            (aho.inicial > 0
+              ? 'Con ' + money0(aho.inicial) + ' que ya tenías'
+              : 'Total en ' + aho.meses + (aho.meses === 1 ? ' mes' : ' meses')) +
+          '</span>' +
         '</div>' +
       '</div>';
   }
@@ -924,6 +990,31 @@ function renderFoco(k, c){
           '</summary>' +
           '<p class="nota" style="margin:8px 0 2px">Gastos fijos de este mes que todavía no has registrado. No los cuentes como dinero libre.</p>' +
           '<div class="fijos">' + filas + '</div>' +
+        '</details>' +
+      '</div>';
+  }
+
+  // 2b — dónde está el dinero ahora mismo
+  var sal = saldos();
+  if (sal.cuentas.length && (sal.total !== 0 || aho.meses > 0)){
+    html +=
+      '<div class="tarj">' +
+        '<details class="plan">' +
+          '<summary>' +
+            '<span>Dónde está tu dinero</span>' +
+            '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>' +
+          '</summary>' +
+          '<p class="nota" style="margin:8px 0 2px">Calculado con lo que has registrado. Si no cuadra con tu banco, ajusta el saldo inicial en Ajustes → Cuentas.</p>' +
+          sal.cuentas.map(function(x){
+            return '<div class="mov">' +
+              '<span class="tx"><b>' + esc(x.nom) + '</b><span>' + esc(ROLES[x.rol] || "Otra") + '</span></span>' +
+              '<span class="im num"' + (x.saldo < 0 ? ' style="color:var(--danger)"' : '') + '>' + money(x.saldo) + '</span>' +
+            '</div>';
+          }).join("") +
+          '<div class="mov" style="border-top:1px solid var(--line); border-bottom:0; margin-top:2px">' +
+            '<span class="tx"><b>Total</b></span>' +
+            '<span class="im num">' + money(sal.total) + '</span>' +
+          '</div>' +
         '</details>' +
       '</div>';
   }
@@ -1359,17 +1450,21 @@ function pintarAjustes(){
 
   if (pestana === "cuentas"){
     cuerpo =
-      '<p class="nota" style="margin-top:0">El papel de cada cuenta es lo que usa el plan de traspasos para decirte cuánto mover al cobrar.</p>' +
+      '<p class="nota" style="margin-top:0">El papel de cada cuenta es lo que usa el plan de traspasos para decirte cuánto mover al cobrar. ' +
+        'En <b>ya tenía</b> pon el dinero que había en esa cuenta —o en tu bolsillo— antes de empezar a usar la app.</p>' +
       '<div class="listaed">' +
         c.cuentas.map(function(x, i){
           return '<div class="item">' +
             '<div class="g" style="display:grid;gap:6px">' +
-              '<input type="text" data-cn="' + i + '" value="' + esc(x.nom) + '" style="font-size:13.5px;padding:7px 9px">' +
-              '<select data-cr="' + i + '" style="font-size:12px;padding:6px 9px">' +
-                Object.keys(ROLES).map(function(r){
-                  return '<option value="' + r + '"' + (x.rol===r?" selected":"") + '>' + ROLES[r] + '</option>';
-                }).join("") +
-              '</select>' +
+              '<input type="text" data-cn="' + i + '" value="' + esc(x.nom) + '" aria-label="Nombre" style="font-size:13.5px;padding:7px 9px">' +
+              '<div class="fila2" style="gap:6px">' +
+                '<select data-cr="' + i + '" aria-label="Para qué sirve" style="font-size:12px;padding:6px 9px">' +
+                  Object.keys(ROLES).map(function(r){
+                    return '<option value="' + r + '"' + (x.rol===r?" selected":"") + '>' + ROLES[r] + '</option>';
+                  }).join("") +
+                '</select>' +
+                '<input type="number" data-ci="' + i + '" inputmode="decimal" step="0.01" placeholder="ya tenía" value="' + (x.inicial || "") + '" aria-label="Saldo inicial" style="font-size:12px;padding:6px 9px">' +
+              '</div>' +
             '</div>' +
             '<button class="x" data-cx="' + i + '" aria-label="Quitar cuenta">' +
               '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>' +
@@ -1568,7 +1663,7 @@ function pintarAjustes(){
   if (pestana === "cuentas"){
     document.getElementById("aAddCuenta").onclick = function(){
       var n = JSON.parse(JSON.stringify(cfg()));
-      n.cuentas.push({id: uid(), nom: "Nueva cuenta", rol: "otro"});
+      n.cuentas.push({id: uid(), nom: "Nueva cuenta", rol: "otro", inicial: 0});
       guardarConfig(n); pintarAjustes();
     };
     Array.prototype.forEach.call(body.querySelectorAll("[data-cx]"), function(b){
@@ -1585,6 +1680,9 @@ function pintarAjustes(){
       });
       Array.prototype.forEach.call(body.querySelectorAll("[data-cr]"), function(el){
         n.cuentas[+el.dataset.cr].rol = el.value;
+      });
+      Array.prototype.forEach.call(body.querySelectorAll("[data-ci]"), function(el){
+        n.cuentas[+el.dataset.ci].inicial = parseFloat(String(el.value).replace(",", ".")) || 0;
       });
       guardarConfig(n);
       dlgAj.close();
