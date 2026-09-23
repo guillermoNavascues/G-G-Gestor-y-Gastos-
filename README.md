@@ -8,9 +8,28 @@ depende de ninguna tienda de aplicaciones.
 - **30 %** ocio — restaurantes, ropa, caprichos, viajes
 - **20 %** ahorro — fondo de emergencia e inversión
 
+## Diseño
+
+Oscuro con acento verde lima, inspirado en el panel de *Control Financiero*
+(@controlapp_es) y adaptado a Android: tipografía Manrope, cercana a MiSans.
+
+- **Tres secciones:** *Inicio* (balance del mes, patrimonio, reparto, metas y
+  últimos movimientos), *Movimientos* (con filtros) y *Análisis* (a dónde ha ido
+  la nómina, dónde está tu dinero y el plan de traspasos).
+- **Barra inferior** con el botón **+** en el centro. En pantallas anchas se
+  convierte en el menú lateral del diseño original.
+- **Alta rápida en tres pasos:** *¿Qué es?* → *¿Cuánto cuesta?* (teclado
+  numérico propio) → *¿De qué es?*. Recuerda: al repetir un concepto propone el
+  importe, la categoría y la cuenta de la última vez.
+- **Atajos del icono:** mantén pulsado G&G → *Nuevo gasto* o *Movimientos*. El
+  atajo se puede arrastrar a la pantalla de inicio como botón de un toque.
+- **Gesto atrás de Android:** retrocede un paso, cierra la hoja o vuelve a
+  Inicio, en lugar de salir de la app.
+- Aviso inferior con **Deshacer** al apuntar un gasto.
+
 ## Qué hace
 
-- Los tres sobres arriba, con lo que queda en cada uno, y la lista de gastos abajo.
+- Los tres sobres, con lo que queda en cada uno, y la lista de gastos.
 - **Comprometido vs. libre:** los gastos fijos que aún no han pasado se
   descuentan visualmente, para no confundir el saldo con dinero disponible.
 - **Capital ahorrado y Ahorros:** lo que sobró de esenciales y ocio este mes,
@@ -54,7 +73,7 @@ se paga. Es lo que permite que el 50 % se reparta entre varios bancos.
 src/
   gyg.html            Fuente único de la app
   construir_pwa.py    Genera docs/ a partir del fuente
-  gen_iconos.py       Genera los iconos (las bandas son 50/30/20)
+  gen_iconos.py       Genera los iconos (bandas 50/30/20) y los de los atajos
 docs/
   index.html          Build de la PWA — lo que sirve Cloudflare
   manifest.webmanifest
@@ -98,6 +117,11 @@ hay instalación ni funcionamiento sin conexión.
 - **Android (Chrome):** menú ⋮ → *Instalar aplicación*.
 - **iPhone (Safari):** *Compartir* → *Añadir a pantalla de inicio*. Tiene que
   ser Safari; desde Chrome en iOS no se instala.
+
+Los atajos del icono sólo aparecen si la app está **instalada** desde Chrome
+(*Instalar aplicación*), no si es un simple acceso directo de *Añadir a pantalla
+de inicio*. Un botón en los Ajustes rápidos de Android no es posible para una
+web instalada: sólo pueden añadirlo apps nativas.
 
 ## Generar el APK
 

@@ -22,15 +22,14 @@ CABECERA = u"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F4F5F2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#131614" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0B0D0A">
 <meta name="description" content="G&amp;G \u2014 Gestor y Gastos. Presupuesto personal con el m\u00e9todo 50/30/20.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="iconos/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="iconos/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="G&amp;G">
 <style>
   html{-webkit-text-size-adjust:100%}
@@ -40,21 +39,14 @@ CABECERA = u"""<!doctype html>
 </style>
 """
 
+# Las zonas seguras (notch, barra de gestos) ya van en el CSS de la app.
 SEGURO = u"""</style>
-
-<style>
-  /* respeta el notch y la barra inferior del iPhone */
-  body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
-  .top{padding-top:calc(18px + env(safe-area-inset-top))}
-  .fab{bottom:calc(20px + env(safe-area-inset-bottom))}
-  .hoja{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
-</style>
 </head>
 <body>
 
-<div class="wrap">"""
+<div class="app">"""
 
-src = sustituir(src, u'</style>\n\n<div class="wrap">', SEGURO, "cierre de estilos")
+src = sustituir(src, u'</style>\n\n<div class="app">', SEGURO, "cierre de estilos")
 src = CABECERA + src + u"\n</body>\n</html>\n"
 
 
@@ -150,7 +142,7 @@ function importarCopia(fichero){
 function avisoDatos(tipo, texto){
   var el = document.getElementById("dAviso");
   if (!el) return;
-  var col = tipo === "ok" ? "var(--a)" : "var(--danger)";
+  var col = tipo === "ok" ? "var(--a)" : "var(--rojo)";
   el.innerHTML = '<p class="nota" style="margin:12px 0 0;color:' + col + '">' + esc(texto) + '</p>';
 }
 
@@ -232,8 +224,14 @@ MANIFIESTO = u"""{
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F4F5F2",
-  "theme_color": "#F4F5F2",
+  "background_color": "#0B0D0A",
+  "theme_color": "#0B0D0A",
+  "shortcuts": [
+    { "name": "Nuevo gasto", "short_name": "Gasto", "description": "Apunta un gasto en tres toques",
+      "url": "./?accion=gasto", "icons": [{ "src": "iconos/atajo-gasto.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Movimientos", "short_name": "Movimientos", "description": "Todo lo que has registrado este mes",
+      "url": "./?vista=movs", "icons": [{ "src": "iconos/atajo-movs.png", "sizes": "96x96", "type": "image/png" }] }
+  ],
   "icons": [
     { "src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
@@ -247,7 +245,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v12";
+const VERSION = "v13";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.
@@ -262,7 +260,9 @@ const ESQUELETO = [
   "./iconos/icono-512.png",
   "./iconos/icono-maskable-512.png",
   "./iconos/apple-touch-icon.png",
-  "./iconos/favicon-32.png"
+  "./iconos/favicon-32.png",
+  "./iconos/atajo-gasto.png",
+  "./iconos/atajo-movs.png"
 ];
 
 const FUENTES = /^https:\\/\\/fonts\\.(googleapis|gstatic)\\.com\\//;

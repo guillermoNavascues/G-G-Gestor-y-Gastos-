@@ -1,6 +1,6 @@
 /* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v12";
+const VERSION = "v13";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.
@@ -15,7 +15,9 @@ const ESQUELETO = [
   "./iconos/icono-512.png",
   "./iconos/icono-maskable-512.png",
   "./iconos/apple-touch-icon.png",
-  "./iconos/favicon-32.png"
+  "./iconos/favicon-32.png",
+  "./iconos/atajo-gasto.png",
+  "./iconos/atajo-movs.png"
 ];
 
 const FUENTES = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
