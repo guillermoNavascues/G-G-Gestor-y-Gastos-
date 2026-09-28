@@ -54,15 +54,15 @@ src = CABECERA + src + u"\n</body>\n</html>\n"
 src = sustituir(
     src,
     u'[["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"]]',
-    u'[["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]]',
+    u'[["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Datos"]]',
     "pestanas")
 
 
 # -------------------------------------------------------- 3. panel de la copia
 PANEL = u"""  if (pestana === "datos"){
     var inv = inventario();
-    cuerpo =
-      '<p class="nota" style="margin-top:0">Tus datos viven en este dispositivo. Antes de cambiar de móvil, exporta una copia y la importas en el nuevo.</p>' +
+    cuerpo = panelRecuperar("arriba") +
+      '<p class="nota">Tus datos viven en este dispositivo. Antes de cambiar de móvil, exporta una copia y la importas en el nuevo.</p>' +
       '<div class="item" style="margin-bottom:12px">' +
         '<div class="g"><b>' + inv.meses + (inv.meses === 1 ? ' mes guardado' : ' meses guardados') + '</b>' +
         '<span>' + inv.movs + (inv.movs === 1 ? ' movimiento' : ' movimientos') + ' en total</span></div>' +
@@ -71,7 +71,8 @@ PANEL = u"""  if (pestana === "datos"){
       '<button class="add" id="dImportar">Importar una copia</button>' +
       '<input type="file" id="dFichero" accept="application/json,.json" style="display:none">' +
       '<div id="dAviso"></div>' +
-      instalarHTML();
+      instalarHTML() +
+      panelRecuperar("abajo");
   }
 
 """
@@ -170,6 +171,7 @@ function cablearDatos(){
   var im = document.getElementById("dImportar");
   var fi = document.getElementById("dFichero");
   var ins = document.getElementById("dInstalar");
+  cablearRecuperar();
   if (ex) ex.onclick = exportarCopia;
   if (im) im.onclick = function(){ fi.click(); };
   if (fi) fi.onchange = function(){ if (fi.files && fi.files[0]) importarCopia(fi.files[0]); };
@@ -193,7 +195,7 @@ src = sustituir(
     : "<b>Guardado solo en este dispositivo.</b> Aún no hay conexión con la nube.";''',
     u'''  document.getElementById("sync").innerHTML = almacen.estado === "nube"
     ? "<b>Sincronizado en la nube.</b> Tus datos te siguen si cambias de móvil."
-    : "<b>Guardado en este dispositivo.</b> Antes de cambiar de móvil, exporta una copia desde Ajustes \\u2192 Copia.";''',
+    : "<b>Guardado en este dispositivo.</b> Antes de cambiar de móvil, exporta una copia desde Ajustes \\u2192 Datos.";''',
     "pie")
 
 
@@ -245,7 +247,7 @@ io.open(os.path.join(DEST, "manifest.webmanifest"), "w", encoding="utf-8").write
 # ---------------------------------------------------------- 8. service worker
 SW = u"""/* G&G - service worker.
    Sube el numero de VERSION cada vez que cambies index.html. */
-const VERSION = "v13";
+const VERSION = "v14";
 const CACHE = "gyg-" + VERSION;
 
 // "./" es la entrada canonica de la app y la que declara el manifiesto.

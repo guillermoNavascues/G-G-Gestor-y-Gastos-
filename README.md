@@ -62,6 +62,14 @@ Oscuro con acento verde lima, inspirado en el panel de *Control Financiero*
   son dos caminos al mismo número.
 - Los sobres son siempre el porcentaje exacto del ingreso: lo que sobra a fin
   de mes no los infla, pasa a los ahorros.
+- **Recuperarse de errores** (*Ajustes → Datos*):
+  - **Deshacer:** antes de cada cambio se guarda cómo estaba lo que se va a
+    pisar; se conservan los últimos 20 pasos.
+  - **Copias de cada mes:** una foto completa al empezar cada mes; quedan las
+    dos últimas.
+  - **Borrar este mes:** vacía los movimientos del mes que estás viendo, con
+    doble toque. Los demás meses y lo ahorrado en ellos no se tocan, y se puede
+    deshacer.
 - Copia de seguridad exportable e importable en `.json`.
 
 La categoría decide en qué sobre cae un gasto — **no** la cuenta desde la que
@@ -148,7 +156,7 @@ En el almacenamiento del navegador, en ese dominio concreto. Implica que:
 
 1. No se sincronizan entre dispositivos.
 2. Cambiar de dominio equivale a empezar de cero.
-3. Al cambiar de móvil hay que migrar a mano: *Ajustes → Copia → Exportar*,
+3. Al cambiar de móvil hay que migrar a mano: *Ajustes → Datos → Exportar*,
    y en el nuevo *Importar*.
 
 La sincronización real llega en la Fase 2, cuando el backend haga falta de

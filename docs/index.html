@@ -372,6 +372,19 @@ input::placeholder{color:var(--ink-3); font-weight:500}
 .sum.bad{color:var(--rojo)} .sum.good{color:var(--lima)}
 .tope{font-size:12px; font-weight:700; margin:-4px 0 12px; color:var(--ink-2)}
 .tope.mal{color:var(--rojo)}
+.sec-dat{margin:4px 0 8px; font-size:14px; font-weight:800; letter-spacing:-.01em}
+.sec-dat.sep{margin-top:22px; padding-top:18px; border-top:1px solid var(--line)}
+.hist{display:grid; gap:6px; margin-bottom:10px}
+.hist-f{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:13px;
+  background:var(--card); border:1px solid var(--line)}
+.hist-f .fm-t b{font-size:12.5px; white-space:normal}
+.hist-f.viejo{opacity:.55}
+.peligro{margin-top:22px; padding:14px; border-radius:16px; border:1px solid rgba(255,91,87,.35); background:var(--rojo-s)}
+.peligro b{display:block; font-size:13.5px; margin-bottom:4px}
+.peligro p{margin:0 0 12px; font-size:12px; color:var(--ink-2); line-height:1.5}
+.btn-rojo{width:100%; padding:12px; border-radius:13px; font-size:13.5px; font-weight:800;
+  background:transparent; color:var(--rojo); border:1px solid var(--rojo)}
+.btn-rojo.armado, .mini-btn.armado{background:var(--rojo); color:#fff; border-color:var(--rojo)}
 .aviso-mov{font-size:12.5px; font-weight:700; color:var(--rojo); margin:-4px 0 12px; line-height:1.45}
 .fijo, .mov{display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line)}
 
@@ -1105,7 +1118,7 @@ function render(){
 
   document.getElementById("sync").innerHTML = almacen.estado === "nube"
     ? "<b>Sincronizado en la nube.</b> Tus datos te siguen si cambias de móvil."
-    : "<b>Guardado en este dispositivo.</b> Antes de cambiar de móvil, exporta una copia desde Ajustes \u2192 Copia.";
+    : "<b>Guardado en este dispositivo.</b> Antes de cambiar de móvil, exporta una copia desde Ajustes \u2192 Datos.";
 }
 
 function pintarCabecera(){
@@ -1686,15 +1699,212 @@ document.addEventListener("keydown", function(ev){
   ev.preventDefault();
 });
 
+/* ============================ historial y recuperación ============================ */
+/* Dos redes de seguridad, sólo en este dispositivo:
+   · Deshacer: antes de cada cambio se guarda cómo estaba lo que se va a pisar.
+     Todo lo que escribe una misma acción forma un único paso.
+   · Copias mensuales: una foto completa de la app por mes; quedan las 2 últimas. */
+
+var HIST_PASOS = 20;
+var grupoPend = null;
+var restaurando = false;
+
+function leerHist(n){
+  try { return JSON.parse(localStorage.getItem("tresobres:hist:" + n)) || []; } catch(e){ return []; }
+}
+
+// Si el almacenamiento se llena, se sacrifican los pasos de deshacer más viejos.
+function guardarHist(n, lista){
+  for (;;){
+    try { localStorage.setItem("tresobres:hist:" + n, JSON.stringify(lista)); return; }
+    catch(e){ if (lista.length > 1) lista.shift(); else return; }
+  }
+}
+
+function clonar(x){ return x == null ? null : JSON.parse(JSON.stringify(x)); }
+
+function asegurarMensual(){
+  var lista = leerHist("mensual");
+  var mesAct = mesId(new Date());
+  if (lista.length && lista[lista.length - 1].mes === mesAct) return;
+  lista.push({mes: mesAct, ts: Date.now(), config: clonar(cfg()), meses: clonar(mesesConocidos())});
+  while (lista.length > 2) lista.shift();
+  guardarHist("mensual", lista);
+}
+
+function antesDeEscribir(tipo, id){
+  if (restaurando) return;
+  asegurarMensual();
+  if (!grupoPend){ grupoPend = {ts: Date.now(), cambios: []}; setTimeout(cerrarGrupo, 0); }
+  var clave = tipo + ":" + (id || "");
+  for (var i = 0; i < grupoPend.cambios.length; i++) if (grupoPend.cambios[i].clave === clave) return;
+  var antes = tipo === "config" ? cfg() : (S.meses[id] || almacen.local("mes:" + id) || null);
+  grupoPend.cambios.push({clave: clave, tipo: tipo, id: id || null, antes: clonar(antes)});
+}
+
+function describirCambio(c){
+  if (c.tipo === "config") return JSON.stringify(c.antes) === JSON.stringify(cfg()) ? null : "Ajustes";
+  var antes = (c.antes && c.antes.movimientos) || [];
+  var ahora = ((S.meses[c.id] || {}).movimientos) || [];
+  var ia = {}, ib = {};
+  antes.forEach(function(m){ ia[m.id] = m; });
+  ahora.forEach(function(m){ ib[m.id] = m; });
+  var add = ahora.filter(function(m){ return !ia[m.id]; });
+  var del = antes.filter(function(m){ return !ib[m.id]; });
+  var mod = ahora.filter(function(m){ return ia[m.id] && JSON.stringify(ia[m.id]) !== JSON.stringify(m); });
+  var n = add.length + del.length + mod.length;
+  if (!n) return null;
+  var nom = function(m){ return "«" + (m.concepto || "sin concepto") + "» " + money(Math.abs(+m.importe || 0)); };
+  if (!ahora.length && antes.length > 1) return "Vaciado " + nombreMes(c.id);
+  if (n === 1) return add.length ? "Añadido " + nom(add[0]) : del.length ? "Borrado " + nom(del[0]) : "Editado " + nom(mod[0]);
+  return n + " cambios en " + nombreMes(c.id);
+}
+
+function cerrarGrupo(){
+  var g = grupoPend;
+  grupoPend = null;
+  if (!g) return;
+  var d = g.cambios.map(describirCambio).filter(Boolean);
+  if (!d.length) return;                       // no cambió nada de verdad
+  g.desc = d.join(" · ");
+  var pila = leerHist("deshacer");
+  pila.push(g);
+  while (pila.length > HIST_PASOS) pila.shift();
+  guardarHist("deshacer", pila);
+}
+
+function aplicarSinHistorial(fn){
+  restaurando = true;
+  try { fn(); } finally { restaurando = false; }
+}
+
+function deshacerUltimo(){
+  if (grupoPend) cerrarGrupo();
+  var pila = leerHist("deshacer");
+  var g = pila.pop();
+  if (!g) return null;
+  aplicarSinHistorial(function(){
+    g.cambios.forEach(function(c){
+      if (c.tipo === "config") guardarConfig(normalizarConfig(c.antes || clonar(CONFIG_DEF)));
+      else guardarMes(c.id, c.antes || {movimientos: []});
+    });
+  });
+  guardarHist("deshacer", pila);
+  return g;
+}
+
+// Volver a una copia mensual es un cambio más: se puede deshacer.
+function restaurarMensual(i){
+  var snap = leerHist("mensual")[i];
+  if (!snap) return false;
+  var actuales = mesesConocidos();
+  guardarConfig(normalizarConfig(clonar(snap.config)));
+  Object.keys(actuales).forEach(function(id){ if (!snap.meses[id]) guardarMes(id, {movimientos: []}); });
+  Object.keys(snap.meses).forEach(function(id){ guardarMes(id, clonar(snap.meses[id]) || {movimientos: []}); });
+  return true;
+}
+
+// Sólo el mes que estás viendo. Los demás meses —y lo ahorrado en ellos— quedan igual.
+function borrarMesActual(){
+  guardarMes(S.mes, {movimientos: []});
+}
+
+function hace(ts){
+  var s = (Date.now() - ts) / 1000;
+  if (s < 60) return "hace un momento";
+  if (s < 3600) return "hace " + Math.floor(s / 60) + " min";
+  if (s < 86400) return "hace " + Math.floor(s / 3600) + " h";
+  var d = new Date(ts);
+  return d.getDate() + " " + MESES_C[d.getMonth()] + ", " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+// Dos toques para lo irreversible: el primero arma el botón, el segundo actúa.
+function confirmarDoble(btn, aviso, accion){
+  if (btn.dataset.arm){ accion(); return; }
+  var orig = btn.textContent;
+  btn.dataset.arm = "1"; btn.textContent = aviso; btn.classList.add("armado");
+  setTimeout(function(){
+    if (!btn.isConnected) return;
+    delete btn.dataset.arm; btn.textContent = orig; btn.classList.remove("armado");
+  }, 4000);
+}
+
+function panelRecuperar(parte){
+  if (parte === "abajo"){
+    var n = movs(S.mes).length;
+    return '<div class="peligro">' +
+      '<b>Borrar los movimientos de ' + esc(nombreMes(S.mes)) + '</b>' +
+      '<p>Deja este mes vacío (' + n + (n === 1 ? ' movimiento' : ' movimientos') + '). Los demás meses, tus ahorros, metas y ajustes no se tocan. ' +
+        'Si te equivocas, se puede deshacer desde arriba.</p>' +
+      '<button class="btn-rojo" id="hBorrarMes"' + (n ? '' : ' disabled') + '>Borrar este mes</button>' +
+    '</div>';
+  }
+  if (grupoPend) cerrarGrupo();
+  var pila = leerHist("deshacer").slice().reverse();
+  var mens = leerHist("mensual");
+  return '<div class="sec-dat">Deshacer cambios</div>' +
+    (pila.length
+      ? '<div class="hist">' + pila.slice(0, 5).map(function(g, i){
+          return '<div class="hist-f' + (i ? ' viejo' : '') + '">' +
+            '<span class="fm-t"><b>' + esc(g.desc) + '</b><small>' + hace(g.ts) + '</small></span>' +
+            (i ? '' : '<button class="mini-btn" id="hDeshacer">Deshacer</button>') +
+          '</div>';
+        }).join("") + '</div>' +
+        '<p class="nota" style="margin:0 0 4px">Se guardan los últimos ' + HIST_PASOS + ' cambios. Deshaz de uno en uno, del más reciente hacia atrás.</p>'
+      : '<p class="nota" style="margin:0 0 4px">Todavía no hay cambios que deshacer.</p>') +
+    '<div class="sec-dat sep">Copias de cada mes</div>' +
+    (mens.length
+      ? '<div class="hist">' + mens.slice().reverse().map(function(m){
+          var i = mens.indexOf(m), nm = 0;
+          Object.keys(m.meses || {}).forEach(function(k){ nm += ((m.meses[k] && m.meses[k].movimientos) || []).length; });
+          return '<div class="hist-f">' +
+            '<span class="fm-t"><b>Como estaba al empezar ' + esc(nombreMes(m.mes)) + '</b><small>' +
+              nm + (nm === 1 ? ' movimiento' : ' movimientos') + ' · guardada ' + hace(m.ts) + '</small></span>' +
+            '<button class="mini-btn" data-hmes="' + i + '">Volver</button>' +
+          '</div>';
+        }).join("") + '</div>' +
+        '<p class="nota" style="margin:0 0 4px">Se guarda una al empezar cada mes y se conservan las dos últimas.</p>'
+      : '') +
+    '<div class="sec-dat sep">Copia de seguridad</div>';
+}
+
+function cablearRecuperar(){
+  var d = document.getElementById("hDeshacer");
+  if (d) d.onclick = function(){
+    var g = deshacerUltimo();
+    pintarAjustes();
+    if (g) snack("Deshecho: " + g.desc);
+  };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-hmes]"), function(b){
+    b.onclick = function(){
+      confirmarDoble(b, "¿Seguro?", function(){
+        restaurarMensual(+b.dataset.hmes);
+        pintarAjustes();
+        snack("Recuperada la copia. Puedes deshacerlo si no era esto.");
+      });
+    };
+  });
+  var bm = document.getElementById("hBorrarMes");
+  if (bm) bm.onclick = function(){
+    confirmarDoble(bm, "Pulsa otra vez para borrar " + nombreMes(S.mes), function(){
+      borrarMesActual();
+      pintarAjustes();
+      snack("Mes vaciado. Tus ahorros de otros meses siguen intactos.", function(){ deshacerUltimo(); pintarAjustes(); });
+    });
+  };
+}
+
 /* ============================ persistencia ============================ */
 
 function guardarConfig(nueva){
+  antesDeEscribir("config");
   S.config = nueva;
   almacen.escribir("config/app", "config", nueva);
   render();
 }
 
 function guardarMes(id, datos){
+  antesDeEscribir("mes", id);
   S.meses[id] = datos;
   almacen.escribir("meses/" + id, "mes:" + id, datos);
   render();
@@ -2087,8 +2297,8 @@ function pintarAjustes(){
 
   if (pestana === "datos"){
     var inv = inventario();
-    cuerpo =
-      '<p class="nota" style="margin-top:0">Tus datos viven en este dispositivo. Antes de cambiar de móvil, exporta una copia y la importas en el nuevo.</p>' +
+    cuerpo = panelRecuperar("arriba") +
+      '<p class="nota">Tus datos viven en este dispositivo. Antes de cambiar de móvil, exporta una copia y la importas en el nuevo.</p>' +
       '<div class="item" style="margin-bottom:12px">' +
         '<div class="g"><b>' + inv.meses + (inv.meses === 1 ? ' mes guardado' : ' meses guardados') + '</b>' +
         '<span>' + inv.movs + (inv.movs === 1 ? ' movimiento' : ' movimientos') + ' en total</span></div>' +
@@ -2097,14 +2307,15 @@ function pintarAjustes(){
       '<button class="add" id="dImportar">Importar una copia</button>' +
       '<input type="file" id="dFichero" accept="application/json,.json" style="display:none">' +
       '<div id="dAviso"></div>' +
-      instalarHTML();
+      instalarHTML() +
+      panelRecuperar("abajo");
   }
 
   document.getElementById("ajBody").innerHTML =
     '<h2>Ajustes<button class="ico" id="aCerrar" aria-label="Cerrar">' +
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></h2>' +
     '<div class="tabs" role="group">' +
-      [["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Copia"]].map(function(p){
+      [["general","Reparto"],["meta","Metas"],["cuentas","Cuentas"],["fijos","Fijos"],["cats","Categorías"],["datos","Datos"]].map(function(p){
         return '<button type="button" data-tab="' + p[0] + '" aria-pressed="' + (pestana===p[0]) + '">' + p[1] + '</button>';
       }).join("") +
     '</div>' + cuerpo;
@@ -2347,6 +2558,7 @@ function cablearDatos(){
   var im = document.getElementById("dImportar");
   var fi = document.getElementById("dFichero");
   var ins = document.getElementById("dInstalar");
+  cablearRecuperar();
   if (ex) ex.onclick = exportarCopia;
   if (im) im.onclick = function(){ fi.click(); };
   if (fi) fi.onchange = function(){ if (fi.files && fi.files[0]) importarCopia(fi.files[0]); };
@@ -2445,6 +2657,7 @@ if (navigator.storage && navigator.storage.persist){
 }
 
 cargarLocal();
+asegurarMensual();
 render();
 
 // Atajos del icono: al mantener pulsado G&G en el móvil aparecen "Nuevo gasto"
